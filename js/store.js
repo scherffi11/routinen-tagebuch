@@ -113,10 +113,10 @@ export function relativeDate(iso) {
 export function emptyDay(date) {
   return {
     date,
-    sleep: { bedtime: '', onset: null, wakeAt: '', awakenings: null, quality: null, rested: null },
+    sleep: { bedtime: '', onset: null, wakeAt: '', awakenings: null, rested: null },
     mood: { mood: null, energy: null, stress: null, focus: null },
     routines: {},
-    intake: { alcohol: null, caffeine: null, lastCaffeine: '' },
+    intake: { alcohol: null, lastCoffee: null, lastMeal: null },
     note: '',
     tags: [],
     updatedAt: null,
@@ -171,10 +171,11 @@ export function dayCount() {
  * Bewusst großzügig: ein Tag mit nur einer Stimmungsangabe ist besser als kein Tag.
  */
 export function isFilled(day) {
-  const s = day.sleep, m = day.mood;
+  const s = day.sleep, m = day.mood, i = day.intake;
   return Boolean(
-    s.quality || s.rested || s.bedtime || s.wakeAt || s.onset ||
+    s.rested || s.bedtime || s.wakeAt || s.onset ||
     m.mood || m.energy || m.stress || m.focus ||
+    i.alcohol || i.lastCoffee || i.lastMeal ||
     day.note.trim() ||
     Object.values(day.routines).some(Boolean)
   );

@@ -80,14 +80,14 @@ function scale(field, path, label, hint, low, high, value) {
     </div>`;
 }
 
-function timeField(path, label, value, hint = '') {
+function timeField(path, label, value, hint = '', step = null) {
   return `
     <div class="field">
       <div class="field-head">
         <label for="f-${path}">${esc(label)}</label>
         ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
       </div>
-      <input type="time" id="f-${path}" data-input="${path}" value="${esc(value || '')}">
+      <input type="time" id="f-${path}" data-input="${path}" value="${esc(value || '')}"${step ? ` step="${step}"` : ''}>
     </div>`;
 }
 
@@ -97,18 +97,33 @@ const ONSET_OPTIONS = [
   ['slow', 'Langsam'],
 ];
 
-function onsetField(value) {
-  const buttons = ONSET_OPTIONS.map(
-    ([val, label]) => `<button type="button" class="onset-btn${value === val ? ' on' : ''}"
-      data-onset="${val}" aria-pressed="${value === val}">${label}</button>`
-  ).join('');
+const DAYTIME_OPTIONS = [
+  ['morning', 'Morgens'],
+  ['forenoon', 'Vormittags'],
+  ['afternoon', 'Nachmittags'],
+  ['evening', 'Abends'],
+];
+
+const YESNO_OPTIONS = [
+  ['yes', 'Ja'],
+  ['no', 'Nein'],
+];
+
+/** Tap-Auswahl aus wenigen Optionen, z. B. Ja/Nein oder Tageszeiten. Erneutes Antippen löscht die Wahl. */
+function tapGroup(path, label, options, value, hint = '') {
+  const buttons = options
+    .map(
+      ([val, lbl]) => `<button type="button" class="tap-btn${value === val ? ' on' : ''}"
+        data-tap="${esc(path)}" data-tap-value="${esc(val)}" aria-pressed="${value === val}">${esc(lbl)}</button>`
+    )
+    .join('');
   return `
     <div class="field">
       <div class="field-head">
-        <label>Einschlafen</label>
-        <span class="hint">wie schnell?</span>
+        <label>${esc(label)}</label>
+        ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
       </div>
-      <div class="onset-group">${buttons}</div>
+      <div class="tap-group cols-${options.length}">${buttons}</div>
     </div>`;
 }
 
@@ -153,13 +168,12 @@ export function renderToday(date = currentDate) {
     <section class="card">
       <h2>Letzte Nacht <span class="card-sub">${esc(nightFrom)} → ${esc(nightTo)}</span></h2>
       <div class="grid-2">
-        ${timeField('sleep.bedtime', 'Ins Bett', d.sleep.bedtime)}
+        ${timeField('sleep.bedtime', 'Ins Bett', d.sleep.bedtime, '', 900)}
         ${timeField('sleep.wakeAt', 'Aufgewacht', d.sleep.wakeAt)}
       </div>
-      ${onsetField(d.sleep.onset)}
+      ${tapGroup('sleep.onset', 'Einschlafen', ONSET_OPTIONS, d.sleep.onset, 'wie schnell?')}
       ${numberField('sleep.awakenings', 'Nachts wach', d.sleep.awakenings, 'wie oft', 20)}
       <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
-      ${scale('sleep', 'sleep.quality', 'Schlafqualität', '', 'schlecht', 'sehr gut', d.sleep.quality)}
       ${scale('sleep', 'sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested)}
     </section>
 
@@ -195,11 +209,9 @@ export function renderToday(date = currentDate) {
 
     <section class="card">
       <h2>Konsum</h2>
-      <div class="grid-2">
-        ${numberField('intake.caffeine', 'Koffein', d.intake.caffeine, 'Tassen/Dosen', 20)}
-        ${timeField('intake.lastCaffeine', 'Letztes davon', d.intake.lastCaffeine, 'Uhrzeit')}
-        ${numberField('intake.alcohol', 'Alkohol', d.intake.alcohol, 'Gläser', 30)}
-      </div>
+      ${tapGroup('intake.alcohol', 'Alkohol', YESNO_OPTIONS, d.intake.alcohol)}
+      ${tapGroup('intake.lastCoffee', 'Letzter Kaffee', DAYTIME_OPTIONS, d.intake.lastCoffee)}
+      ${tapGroup('intake.lastMeal', 'Letzte große Mahlzeit', DAYTIME_OPTIONS, d.intake.lastMeal)}
     </section>
 
     <section class="card">
@@ -245,7 +257,7 @@ function historyRow(day) {
   const done = Object.values(day.routines).filter(Boolean).length;
   const bits = [];
   if (dur != null) bits.push(`${store.formatDuration(dur)} Schlaf`);
-  if (day.sleep.quality) bits.push(`Schlaf ${day.sleep.quality}/5`);
+  if (day.sleep.rested) bits.push(`Erholt ${day.sleep.rested}/5`);
   if (day.mood.mood) bits.push(`Stimmung ${day.mood.mood}/5`);
   if (done) bits.push(`${done} ${done === 1 ? 'Routine' : 'Routinen'}`);
 
@@ -413,6 +425,14 @@ function setPath(path, value) {
   obj[parts[0]] = value;
 }
 
+/** Rundet "HH:MM" auf das nächste 15-Minuten-Raster, Mitternacht inklusive. */
+function roundToQuarterHour(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  const total = (((h * 60 + Math.round(m / 15) * 15) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 function refreshDuration() {
   const el = document.querySelector('[data-duration]');
   if (el) el.textContent = store.formatDuration(store.sleepMinutes(currentDay.sleep));
@@ -435,19 +455,22 @@ function updateBackupHint() {
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-scale], [data-onset], [data-nav], [data-open], [data-deactivate], [data-goto], .wd');
+  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-open], [data-deactivate], [data-goto], .wd');
   if (!t) return;
 
-  if (t.dataset.onset) {
-    const value = t.dataset.onset;
-    const next = currentDay.sleep.onset === value ? null : value;
-    currentDay.sleep.onset = next;
-    t.closest('.onset-group').querySelectorAll('[data-onset]').forEach((b) => {
-      const on = b.dataset.onset === next;
+  if (t.dataset.tap) {
+    const path = t.dataset.tap;
+    const value = t.dataset.tapValue;
+    const parts = path.split('.');
+    const current = parts.reduce((o, k) => o?.[k], currentDay);
+    const next = current === value ? null : value;
+    setPath(path, next);
+    t.closest('.tap-group').querySelectorAll('[data-tap]').forEach((b) => {
+      const on = b.dataset.tapValue === next;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
     });
-    refreshDuration();
+    if (path === 'sleep.onset') refreshDuration();
     scheduleSave();
     return;
   }
@@ -535,6 +558,18 @@ app.addEventListener('change', (e) => {
     document.getElementById('new-routine-days').hidden = e.target.value !== 'anchor';
   }
   if (e.target.id === 'import-file') handleImport(e.target);
+
+  // Erst beim Verlassen des Feldes runden (nicht bei jedem Tastendruck) - sonst
+  // reißt es dem Nutzer mitten in der Eingabe die Uhrzeit unter der Hand weg.
+  if (e.target.dataset.input === 'sleep.bedtime' && e.target.value) {
+    const rounded = roundToQuarterHour(e.target.value);
+    if (rounded !== e.target.value) {
+      e.target.value = rounded;
+      setPath('sleep.bedtime', rounded);
+      refreshDuration();
+      scheduleSave();
+    }
+  }
 });
 
 app.addEventListener('click', (e) => {
