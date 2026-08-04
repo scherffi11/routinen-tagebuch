@@ -5,6 +5,7 @@
  */
 
 import * as store from './store.js';
+import * as calendar from './calendar.js';
 
 const app = document.getElementById('app');
 
@@ -90,6 +91,27 @@ function timeField(path, label, value, hint = '') {
     </div>`;
 }
 
+const ONSET_OPTIONS = [
+  ['fast', 'Schnell'],
+  ['medium', 'Mittel'],
+  ['slow', 'Langsam'],
+];
+
+function onsetField(value) {
+  const buttons = ONSET_OPTIONS.map(
+    ([val, label]) => `<button type="button" class="onset-btn${value === val ? ' on' : ''}"
+      data-onset="${val}" aria-pressed="${value === val}">${label}</button>`
+  ).join('');
+  return `
+    <div class="field">
+      <div class="field-head">
+        <label>Einschlafen</label>
+        <span class="hint">wie schnell?</span>
+      </div>
+      <div class="onset-group">${buttons}</div>
+    </div>`;
+}
+
 function numberField(path, label, value, hint = '', max = 20) {
   return `
     <div class="field">
@@ -132,11 +154,11 @@ export function renderToday(date = currentDate) {
       <h2>Letzte Nacht <span class="card-sub">${esc(nightFrom)} → ${esc(nightTo)}</span></h2>
       <div class="grid-2">
         ${timeField('sleep.bedtime', 'Ins Bett', d.sleep.bedtime)}
-        ${timeField('sleep.asleepAt', 'Eingeschlafen', d.sleep.asleepAt, 'geschätzt')}
         ${timeField('sleep.wakeAt', 'Aufgewacht', d.sleep.wakeAt)}
-        ${numberField('sleep.awakenings', 'Nachts wach', d.sleep.awakenings, 'wie oft', 20)}
       </div>
-      <p class="duration">Schlafdauer: <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
+      ${onsetField(d.sleep.onset)}
+      ${numberField('sleep.awakenings', 'Nachts wach', d.sleep.awakenings, 'wie oft', 20)}
+      <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
       ${scale('sleep', 'sleep.quality', 'Schlafqualität', '', 'schlecht', 'sehr gut', d.sleep.quality)}
       ${scale('sleep', 'sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested)}
     </section>
@@ -312,6 +334,8 @@ export function renderMore() {
   const since = store.daysSinceBackup();
   const backupText =
     since == null ? 'Noch nie gesichert' : since === 0 ? 'Heute gesichert' : `Vor ${since} Tagen gesichert`;
+  const clientId = store.googleClientId();
+  const connected = calendar.isConnected();
 
   app.innerHTML = `
     <header class="view-head"><h1>Mehr</h1></header>
@@ -337,6 +361,37 @@ export function renderMore() {
       <p class="lead">Füge die App zum Startbildschirm hinzu. Auf dem iPhone ist das keine
         Bequemlichkeit, sondern Pflicht: Safari löscht die Daten von Websites nach etwa
         sieben Tagen ohne Benutzung — bei einer installierten App nicht.</p>
+    </section>
+
+    <section class="card">
+      <h2>Google Kalender</h2>
+      <p class="lead">Trägt deine aktiven Routinen mit Uhrzeit als wiederkehrende Termine in
+        deinen Google Kalender ein. Die Anmeldung läuft direkt bei Google über dein eigenes
+        Konto — ich bekomme deine Zugangsdaten nie zu sehen. Jeder Termin bekommt erstmal
+        30 Minuten; die Länge kannst du danach im Kalender selbst anpassen.</p>
+      ${
+        !clientId
+          ? `
+        <div class="field">
+          <div class="field-head"><label for="google-client-id">Google-Client-ID</label></div>
+          <input type="text" id="google-client-id" placeholder="123-abc.apps.googleusercontent.com">
+        </div>
+        <button type="button" class="btn primary" id="google-save-id">Client-ID speichern</button>
+        <p class="hint-block">Die Client-ID legst du einmalig selbst in der
+          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">
+            Google Cloud Console</a> an. Sie ist nicht geheim, bleibt aber nur auf diesem Gerät.</p>`
+          : `
+        <p class="status-line">Client-ID hinterlegt · ${esc(clientId.slice(0, 14))}…</p>
+        <div class="btn-row">
+          <button type="button" class="btn primary" id="google-connect">
+            ${connected ? 'Verbunden ✓' : 'Mit Google verbinden'}
+          </button>
+          <button type="button" class="btn" id="google-sync" ${connected ? '' : 'disabled'}>
+            Routinen eintragen
+          </button>
+        </div>
+        <button type="button" class="btn small ghost google-forget-btn" id="google-forget">Client-ID entfernen</button>`
+      }
     </section>
 
     <section class="card danger">
@@ -380,8 +435,22 @@ function updateBackupHint() {
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-scale], [data-nav], [data-open], [data-deactivate], [data-goto], .wd');
+  const t = e.target.closest('[data-scale], [data-onset], [data-nav], [data-open], [data-deactivate], [data-goto], .wd');
   if (!t) return;
+
+  if (t.dataset.onset) {
+    const value = t.dataset.onset;
+    const next = currentDay.sleep.onset === value ? null : value;
+    currentDay.sleep.onset = next;
+    t.closest('.onset-group').querySelectorAll('[data-onset]').forEach((b) => {
+      const on = b.dataset.onset === next;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    refreshDuration();
+    scheduleSave();
+    return;
+  }
 
   if (t.dataset.scale) {
     const path = t.dataset.scale;
@@ -503,6 +572,46 @@ app.addEventListener('click', (e) => {
   }
 
   if (id === 'import-btn') document.getElementById('import-file').click();
+
+  if (id === 'google-save-id') {
+    const val = document.getElementById('google-client-id').value.trim();
+    if (!val) return toast('Bitte eine Client-ID eingeben');
+    store.setGoogleClientId(val);
+    renderMore();
+    toast('Client-ID gespeichert');
+  }
+
+  if (id === 'google-forget') {
+    calendar.disconnect();
+    store.setGoogleClientId('');
+    renderMore();
+    toast('Client-ID entfernt');
+  }
+
+  if (id === 'google-connect') {
+    calendar
+      .connect()
+      .then(() => {
+        renderMore();
+        toast('Mit Google verbunden');
+      })
+      .catch((err) => toast(`Verbindung fehlgeschlagen: ${err.message}`));
+  }
+
+  if (id === 'google-sync') {
+    toast('Trage Routinen ein …');
+    calendar
+      .syncRoutines(store.routines())
+      .then((r) => {
+        const parts = [];
+        if (r.created) parts.push(`${r.created} neu`);
+        if (r.updated) parts.push(`${r.updated} aktualisiert`);
+        if (r.skipped.length) parts.push(`${r.skipped.length} ohne Uhrzeit übersprungen`);
+        if (r.failed.length) parts.push(`${r.failed.length} fehlgeschlagen`);
+        toast(parts.join(' · ') || 'Keine aktiven Routinen');
+      })
+      .catch((err) => toast(`Fehler: ${err.message}`));
+  }
 
   if (id === 'reset') {
     if (!confirm('Wirklich ALLE Einträge löschen? Das lässt sich nicht rückgängig machen.')) return;

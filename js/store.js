@@ -26,7 +26,7 @@ function emptyData() {
     createdAt: new Date().toISOString(),
     days: {},
     routines: DEFAULT_ROUTINES.map((r) => ({ ...r, active: true })),
-    settings: { lastBackupAt: null },
+    settings: { lastBackupAt: null, google: { clientId: '' } },
   };
 }
 
@@ -59,6 +59,7 @@ function migrate(d) {
   if (!d.days) d.days = {};
   if (!Array.isArray(d.routines)) d.routines = emptyData().routines;
   if (!d.settings) d.settings = { lastBackupAt: null };
+  if (!d.settings.google) d.settings.google = { clientId: '' };
   d.schemaVersion = SCHEMA_VERSION;
   return d;
 }
@@ -112,7 +113,7 @@ export function relativeDate(iso) {
 export function emptyDay(date) {
   return {
     date,
-    sleep: { bedtime: '', asleepAt: '', wakeAt: '', awakenings: null, quality: null, rested: null },
+    sleep: { bedtime: '', onset: null, wakeAt: '', awakenings: null, quality: null, rested: null },
     mood: { mood: null, energy: null, stress: null, focus: null },
     routines: {},
     intake: { alcohol: null, caffeine: null, lastCaffeine: '' },
@@ -172,7 +173,7 @@ export function dayCount() {
 export function isFilled(day) {
   const s = day.sleep, m = day.mood;
   return Boolean(
-    s.quality || s.rested || s.bedtime || s.wakeAt ||
+    s.quality || s.rested || s.bedtime || s.wakeAt || s.onset ||
     m.mood || m.energy || m.stress || m.focus ||
     day.note.trim() ||
     Object.values(day.routines).some(Boolean)
@@ -181,20 +182,25 @@ export function isFilled(day) {
 
 /* ---------- Schlafdauer ---------- */
 
+/** Geschätzte Minuten bis zum Einschlafen, je nach gewählter Geschwindigkeit. */
+export const ONSET_MINUTES = { fast: 5, medium: 20, slow: 45 };
+
 /**
- * Dauer zwischen Einschlaf- und Aufwachzeit in Minuten.
- * Über Mitternacht hinweg: Aufwachzeit vor Einschlafzeit heißt "am nächsten Morgen".
+ * Geschätzte Schlafdauer in Minuten: Zeit im Bett minus die für die gewählte
+ * Einschlafgeschwindigkeit angenommene Einschlafzeit. Eine exakte Einschlafzeit
+ * kennt ohnehin niemand - das war vorher auch nur eine Schätzung.
+ * Über Mitternacht hinweg: Aufwachzeit vor Zubettgehzeit heißt "am nächsten Morgen".
  * Gibt null zurück, wenn eine Zeit fehlt.
  */
 export function sleepMinutes(sleep) {
-  const start = sleep.asleepAt || sleep.bedtime;
-  if (!start || !sleep.wakeAt) return null;
-  const [sh, sm] = start.split(':').map(Number);
+  if (!sleep.bedtime || !sleep.wakeAt) return null;
+  const [sh, sm] = sleep.bedtime.split(':').map(Number);
   const [wh, wm] = sleep.wakeAt.split(':').map(Number);
   if ([sh, sm, wh, wm].some(Number.isNaN)) return null;
   let mins = wh * 60 + wm - (sh * 60 + sm);
   if (mins <= 0) mins += 24 * 60;
-  return mins;
+  const latency = ONSET_MINUTES[sleep.onset] ?? 0;
+  return Math.max(0, mins - latency);
 }
 
 export function formatDuration(mins) {
@@ -245,6 +251,22 @@ export function newRoutineId(name) {
 
 export function settings() {
   return data.settings;
+}
+
+export function googleClientId() {
+  return data.settings.google?.clientId || '';
+}
+
+export function setGoogleClientId(id) {
+  data.settings.google = { clientId: id.trim() };
+  return persist();
+}
+
+/** Merkt sich, welcher Google-Kalendertermin zu einer Routine gehört - für Updates statt Duplikate. */
+export function setRoutineEventId(routineId, eventId) {
+  const r = data.routines.find((x) => x.id === routineId);
+  if (r) r.googleEventId = eventId;
+  return persist();
 }
 
 export function markBackup() {
