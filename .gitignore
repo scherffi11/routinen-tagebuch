@@ -1,0 +1,12 @@
+# Das Repo ist bei GitHub Pages öffentlich. Hier darf NIE eine Sicherung landen.
+# Exporte heißen routinen-tagebuch_JJJJ-MM-TT.json und werden sonst leicht
+# versehentlich in den Projektordner geschoben.
+/*.json
+/daten/
+/backups/
+
+# Windows / Editor
+Thumbs.db
+desktop.ini
+.vscode/
+*.swp

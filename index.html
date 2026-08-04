@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Routinen-Tagebuch</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Schlaf, Befinden und Routinen festhalten.">
+  <meta name="theme-color" content="#12141c">
+  <meta name="color-scheme" content="dark light">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tagebuch">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <main id="app" class="app"></main>
+
+  <nav class="tabs" aria-label="Hauptnavigation">
+    <button type="button" class="tab on" data-view="today" aria-current="page">
+      <span class="tab-icon" aria-hidden="true">✎</span><span>Eintrag</span>
+    </button>
+    <button type="button" class="tab" data-view="history" aria-current="false">
+      <span class="tab-icon" aria-hidden="true">☰</span><span>Verlauf</span>
+    </button>
+    <button type="button" class="tab" data-view="routines" aria-current="false">
+      <span class="tab-icon" aria-hidden="true">◉</span><span>Routinen</span>
+    </button>
+    <button type="button" class="tab" data-view="more" aria-current="false">
+      <span class="tab-icon" aria-hidden="true">⋯</span><span>Mehr</span>
+    </button>
+  </nav>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
