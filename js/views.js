@@ -109,6 +109,11 @@ const YESNO_OPTIONS = [
   ['no', 'Nein'],
 ];
 
+const WAKEUP_OPTIONS = [
+  ['immediate', 'Sofort aufgestanden'],
+  ['snooze', 'Snooze'],
+];
+
 /** Tap-Auswahl aus wenigen Optionen, z. B. Ja/Nein oder Tageszeiten. Erneutes Antippen löscht die Wahl. */
 function tapGroup(path, label, options, value, hint = '') {
   const buttons = options
@@ -172,6 +177,7 @@ export function renderToday(date = currentDate) {
         ${timeField('sleep.wakeAt', 'Aufgewacht', d.sleep.wakeAt)}
       </div>
       ${tapGroup('sleep.onset', 'Einschlafen', ONSET_OPTIONS, d.sleep.onset, 'wie schnell?')}
+      ${tapGroup('sleep.wakeUp', 'Aufstehen', WAKEUP_OPTIONS, d.sleep.wakeUp)}
       ${numberField('sleep.awakenings', 'Nachts wach', d.sleep.awakenings, 'wie oft', 20)}
       <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
       ${scale('sleep', 'sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested)}

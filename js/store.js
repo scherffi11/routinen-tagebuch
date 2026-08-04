@@ -14,10 +14,10 @@ const SCHEMA_VERSION = 1;
 
 /** Routinen, mit denen die App startet. Jederzeit änderbar unter "Routinen". */
 const DEFAULT_ROUTINES = [
-  { id: 'sport',      name: 'Sport / Bewegung',   type: 'anchor',   weekdays: [1, 3, 5], time: '19:00' },
-  { id: 'draussen',   name: '30 Min draußen',     type: 'daily',    weekdays: [],        time: '' },
-  { id: 'lesen',      name: 'Gelesen statt Handy',type: 'daily',    weekdays: [],        time: '22:30' },
-  { id: 'bildschirm', name: 'Bildschirm aus vor dem Bett', type: 'daily', weekdays: [], time: '22:30' },
+  { id: 'kein-handy',  name: 'Kein Handy mehr',                 type: 'daily', weekdays: [], time: '22:00' },
+  { id: 'lesen',       name: 'Lesen vorm Schlafengehen',        type: 'daily', weekdays: [], time: '' },
+  { id: 'fruehstueck', name: 'Tisch für Frühstück vorbereiten', type: 'daily', weekdays: [], time: '' },
+  { id: 'notizbuch',   name: 'Notizbuch füllen',                type: 'daily', weekdays: [], time: '' },
 ];
 
 function emptyData() {
@@ -113,7 +113,7 @@ export function relativeDate(iso) {
 export function emptyDay(date) {
   return {
     date,
-    sleep: { bedtime: '', onset: null, wakeAt: '', awakenings: null, rested: null },
+    sleep: { bedtime: '', onset: null, wakeAt: '', wakeUp: null, awakenings: null, rested: null },
     mood: { mood: null, energy: null, stress: null, focus: null },
     routines: {},
     intake: { alcohol: null, lastCoffee: null, lastMeal: null },
@@ -173,7 +173,7 @@ export function dayCount() {
 export function isFilled(day) {
   const s = day.sleep, m = day.mood, i = day.intake;
   return Boolean(
-    s.rested || s.bedtime || s.wakeAt || s.onset ||
+    s.rested || s.bedtime || s.wakeAt || s.onset || s.wakeUp ||
     m.mood || m.energy || m.stress || m.focus ||
     i.alcohol || i.lastCoffee || i.lastMeal ||
     day.note.trim() ||
