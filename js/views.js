@@ -13,6 +13,8 @@ const app = document.getElementById('app');
 let currentDate = store.isoDate();
 let currentDay = null;
 let saveTimer = null;
+/** Schlaf-Maske morgens, Tages-Maske abends — je nachdem, wann man reinschaut. */
+let currentMode = new Date().getHours() < 12 ? 'sleep' : 'day';
 
 /* ---------- kleine Helfer ---------- */
 
@@ -114,6 +116,19 @@ const WAKEUP_OPTIONS = [
   ['snooze', 'Snooze'],
 ];
 
+const SPORT_OPTIONS = [
+  ['none', 'Kein Sport'],
+  ['light', 'Leichte Aktivität'],
+  ['hard', 'Anstrengend'],
+  ['intense', 'Intensiv'],
+];
+
+const AWAKENINGS_OPTIONS = [
+  ['none', 'Durchgeschlafen'],
+  ['once', '1x wach'],
+  ['multiple', 'Mehrfach wach'],
+];
+
 /** Tap-Auswahl aus wenigen Optionen, z. B. Ja/Nein oder Tageszeiten. Erneutes Antippen löscht die Wahl. */
 function tapGroup(path, label, options, value, hint = '') {
   const buttons = options
@@ -129,18 +144,6 @@ function tapGroup(path, label, options, value, hint = '') {
         ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
       </div>
       <div class="tap-group cols-${options.length}">${buttons}</div>
-    </div>`;
-}
-
-function numberField(path, label, value, hint = '', max = 20) {
-  return `
-    <div class="field">
-      <div class="field-head">
-        <label for="f-${path}">${esc(label)}</label>
-        ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
-      </div>
-      <input type="number" inputmode="numeric" min="0" max="${max}" id="f-${path}"
-             data-input="${path}" value="${value ?? ''}">
     </div>`;
 }
 
@@ -170,6 +173,24 @@ export function renderToday(date = currentDate) {
 
     ${isFuture ? '<p class="notice">Dieser Tag liegt in der Zukunft.</p>' : ''}
 
+    <div class="mode-switch" role="tablist">
+      <button type="button" class="mode-btn${currentMode === 'sleep' ? ' on' : ''}"
+        data-mode="sleep" role="tab" aria-selected="${currentMode === 'sleep'}">Schlaf</button>
+      <button type="button" class="mode-btn${currentMode === 'day' ? ' on' : ''}"
+        data-mode="day" role="tab" aria-selected="${currentMode === 'day'}">Tag</button>
+    </div>
+
+    ${currentMode === 'sleep' ? sleepSection(d, nightFrom, nightTo) : daySection(d, routineList)}
+
+    <p class="save-status">${d.updatedAt ? 'Gespeichert' : 'Wird automatisch gespeichert'}</p>
+    <div class="backup-hint" hidden></div>
+  `;
+
+  updateBackupHint();
+}
+
+function sleepSection(d, nightFrom, nightTo) {
+  return `
     <section class="card">
       <h2>Letzte Nacht <span class="card-sub">${esc(nightFrom)} → ${esc(nightTo)}</span></h2>
       <div class="grid-2">
@@ -178,11 +199,15 @@ export function renderToday(date = currentDate) {
       </div>
       ${tapGroup('sleep.onset', 'Einschlafen', ONSET_OPTIONS, d.sleep.onset, 'wie schnell?')}
       ${tapGroup('sleep.wakeUp', 'Aufstehen', WAKEUP_OPTIONS, d.sleep.wakeUp)}
-      ${numberField('sleep.awakenings', 'Nachts wach', d.sleep.awakenings, 'wie oft', 20)}
+      ${tapGroup('sleep.awakenings', 'Nachts wach', AWAKENINGS_OPTIONS, d.sleep.awakenings)}
       <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
       ${scale('sleep', 'sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested)}
-    </section>
+      ${tapGroup('sleep.sport', 'Sport', SPORT_OPTIONS, d.sleep.sport, `Vortag · ${nightFrom}`)}
+    </section>`;
+}
 
+function daySection(d, routineList) {
+  return `
     <section class="card">
       <h2>Wie ging es dir heute?</h2>
       ${scale('mood', 'mood.mood', 'Stimmung', '', 'mies', 'super', d.mood.mood)}
@@ -232,13 +257,7 @@ export function renderToday(date = currentDate) {
         <input type="text" id="f-tags" data-tags value="${esc(d.tags.join(', '))}"
           placeholder="arbeit, krank, reise">
       </div>
-    </section>
-
-    <p class="save-status">${d.updatedAt ? 'Gespeichert' : 'Wird automatisch gespeichert'}</p>
-    <div class="backup-hint" hidden></div>
-  `;
-
-  updateBackupHint();
+    </section>`;
 }
 
 /* ---------- Ansicht: Historie ---------- */
@@ -461,7 +480,7 @@ function updateBackupHint() {
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-open], [data-deactivate], [data-goto], .wd');
+  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-mode], [data-open], [data-deactivate], [data-goto], .wd');
   if (!t) return;
 
   if (t.dataset.tap) {
@@ -504,6 +523,16 @@ app.addEventListener('click', (e) => {
     clearTimeout(saveTimer);
     store.saveDay(currentDay);
     renderToday(next);
+    return;
+  }
+
+  if (t.dataset.mode) {
+    if (t.dataset.mode === currentMode) return;
+    // Ausstehende Eingabe sichern, sonst überschreibt der Neu-Render mit altem Stand aus dem Store.
+    clearTimeout(saveTimer);
+    store.saveDay(currentDay);
+    currentMode = t.dataset.mode;
+    renderToday(currentDate);
     return;
   }
 

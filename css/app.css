@@ -88,6 +88,28 @@ h2 { font-size: 1.0rem; margin: 0 0 14px; letter-spacing: -0.01em; }
 }
 .count { color: var(--text-dim); font-size: 0.85rem; }
 
+/* ---------- Moduswahl (Schlaf / Tag) ---------- */
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.mode-btn {
+  min-height: 52px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.mode-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* ---------- Karten ---------- */
 
 .card {

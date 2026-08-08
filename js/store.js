@@ -60,6 +60,13 @@ function migrate(d) {
   if (!Array.isArray(d.routines)) d.routines = emptyData().routines;
   if (!d.settings) d.settings = { lastBackupAt: null };
   if (!d.settings.google) d.settings.google = { clientId: '' };
+  // awakenings war früher eine Zahl (0-20), jetzt eine Kategorie (none/once/multiple).
+  for (const day of Object.values(d.days)) {
+    const a = day?.sleep?.awakenings;
+    if (typeof a === 'number') {
+      day.sleep.awakenings = a === 0 ? 'none' : a === 1 ? 'once' : 'multiple';
+    }
+  }
   d.schemaVersion = SCHEMA_VERSION;
   return d;
 }
@@ -113,7 +120,8 @@ export function relativeDate(iso) {
 export function emptyDay(date) {
   return {
     date,
-    sleep: { bedtime: '', onset: null, wakeAt: '', wakeUp: null, awakenings: null, rested: null },
+    // sport: Sport-Intensität an Tag X-1, dem Tag vor dieser Nacht (nicht Tag X).
+    sleep: { bedtime: '', onset: null, wakeAt: '', wakeUp: null, awakenings: null, rested: null, sport: null },
     mood: { mood: null, energy: null, stress: null, focus: null },
     routines: {},
     intake: { alcohol: null, lastCoffee: null, lastMeal: null },
@@ -173,7 +181,7 @@ export function dayCount() {
 export function isFilled(day) {
   const s = day.sleep, m = day.mood, i = day.intake;
   return Boolean(
-    s.rested || s.bedtime || s.wakeAt || s.onset || s.wakeUp ||
+    s.rested || s.bedtime || s.wakeAt || s.onset || s.wakeUp || s.sport || s.awakenings ||
     m.mood || m.energy || m.stress || m.focus ||
     i.alcohol || i.lastCoffee || i.lastMeal ||
     day.note.trim() ||

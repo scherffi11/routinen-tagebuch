@@ -50,7 +50,14 @@ Ein Eintrag für Datum X enthält
 - Befinden und Routinen **des Tages X**.
 
 Beim Abendeintrag ist beides frisch im Kopf. Für die spätere Auswertung heißt das:
-Routinen von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht.
+Routinen von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht. Aus demselben
+Grund bezieht sich das Sport-Feld in der Schlaf-Maske auf Tag X-1, nicht auf Tag X.
+
+Die Erfassung ist in zwei Masken geteilt — **Schlaf** (morgens ausfüllbar, sobald man
+aufgewacht ist) und **Tag** (abends, für Stimmung/Routinen/Konsum/Notiz). Ein Umschalter
+oben in der Erfassung wechselt zwischen beiden; welche zuerst angezeigt wird, richtet sich
+nach der Tageszeit (vor 12 Uhr Schlaf, sonst Tag). Beide Masken schreiben in denselben
+Tageseintrag, es gibt keine getrennte Datenstruktur dafür.
 
 ## Stand
 
