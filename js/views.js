@@ -5,7 +5,6 @@
  */
 
 import * as store from './store.js';
-import * as calendar from './calendar.js';
 
 const app = document.getElementById('app');
 
@@ -413,63 +412,92 @@ function historyRow(day) {
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
+/** Routinen-ID, die gerade bearbeitet wird; NEW_ROUTINE für eine noch nicht angelegte. */
+const NEW_ROUTINE = ' neu';
+let editingRoutine = null;
+
 export function renderRoutines() {
   const list = store.routines();
 
   app.innerHTML = `
     <header class="view-head"><h1>Routinen</h1></header>
-    <p class="lead">Täglich heißt: zählt jeden Tag. Fester Rhythmus heißt: zählt nur an den
-      gewählten Wochentagen — nur dann taucht die Routine in der Erfassung auf.</p>
+    <p class="lead">Verhaltensweisen, die du regelmäßig nachhalten willst.
+      Tippe eine an, um Name, Rhythmus oder Uhrzeit zu ändern.</p>
 
     <ul class="routine-admin">
-      ${list.map(routineAdminRow).join('') || '<li class="empty">Keine aktiven Routinen.</li>'}
+      ${list.map((r) => (editingRoutine === r.id ? routineEditRow(r) : routineAdminRow(r))).join('')
+        || '<li class="empty">Keine aktiven Routinen.</li>'}
     </ul>
 
-    <section class="card">
-      <h2>Neue Routine</h2>
-      <div class="field">
-        <div class="field-head"><label for="new-routine-name">Name</label></div>
-        <input type="text" id="new-routine-name" placeholder="z. B. Meditation" maxlength="60">
-      </div>
-      <div class="field">
-        <div class="field-head"><label for="new-routine-type">Rhythmus</label></div>
-        <select id="new-routine-type">
-          <option value="daily">täglich</option>
-          <option value="anchor">fester Wochenrhythmus</option>
-        </select>
-      </div>
-      <div class="field" id="new-routine-days" hidden>
-        <div class="field-head"><label>Wochentage</label></div>
-        <div class="weekdays">
-          ${[1, 2, 3, 4, 5, 6, 0]
-            .map(
-              (n) => `<button type="button" class="wd" data-wd="${n}" aria-pressed="false">${WEEKDAYS[n]}</button>`
-            )
-            .join('')}
-        </div>
-      </div>
-      <div class="field">
-        <div class="field-head"><label for="new-routine-time">Uhrzeit</label>
-          <span class="hint">optional</span></div>
-        <input type="time" id="new-routine-time">
-      </div>
-      <button type="button" class="btn primary" id="add-routine">Routine hinzufügen</button>
-    </section>`;
+    ${
+      editingRoutine === NEW_ROUTINE
+        ? `<section class="card">${routineForm({}, true)}</section>`
+        : `<button type="button" class="btn" id="new-routine">＋ Neue Routine</button>`
+    }`;
+}
+
+function rhythmLabel(r) {
+  if (r.type !== 'anchor') return 'täglich';
+  return r.weekdays?.length ? r.weekdays.map((n) => WEEKDAYS[n]).join(', ') : 'kein Tag gewählt';
 }
 
 function routineAdminRow(r) {
-  const rhythm =
-    r.type === 'anchor'
-      ? (r.weekdays?.length ? r.weekdays.map((n) => WEEKDAYS[n]).join(', ') : 'kein Tag gewählt')
-      : 'täglich';
   return `
     <li>
-      <div>
+      <button type="button" class="routine-row" data-edit="${esc(r.id)}">
         <strong>${esc(r.name)}</strong>
-        <span class="routine-meta">${esc(rhythm)}${r.time ? ` · ${esc(r.time)}` : ''}</span>
-      </div>
-      <button type="button" class="btn small ghost" data-deactivate="${esc(r.id)}">Ausblenden</button>
+        <span class="routine-meta">${esc(rhythmLabel(r))}${r.time ? ` · ${esc(r.time)}` : ''}</span>
+      </button>
     </li>`;
+}
+
+function routineEditRow(r) {
+  return `<li class="routine-editing">${routineForm(r, false)}</li>`;
+}
+
+/**
+ * Dasselbe Formular für Anlegen und Ändern — sonst driften die beiden Wege
+ * auseinander und eine Änderung muss zweimal gemacht werden.
+ */
+function routineForm(r, isNew) {
+  const type = r.type || 'daily';
+  const days = r.weekdays || [];
+  return `
+    <div class="field">
+      <div class="field-head"><label for="rf-name">Name</label></div>
+      <input type="text" id="rf-name" maxlength="60" placeholder="z. B. Meditation"
+        value="${esc(r.name || '')}">
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="rf-type">Rhythmus</label></div>
+      <select id="rf-type">
+        <option value="daily"${type === 'daily' ? ' selected' : ''}>täglich</option>
+        <option value="anchor"${type === 'anchor' ? ' selected' : ''}>fester Wochenrhythmus</option>
+      </select>
+    </div>
+    <div class="field" id="rf-days"${type === 'anchor' ? '' : ' hidden'}>
+      <div class="field-head"><label>Wochentage</label>
+        <span class="hint">nur dann zählt sie</span></div>
+      <div class="weekdays">
+        ${[1, 2, 3, 4, 5, 6, 0]
+          .map((n) => {
+            const on = days.includes(n);
+            return `<button type="button" class="wd${on ? ' on' : ''}" data-wd="${n}"
+              aria-pressed="${on}">${WEEKDAYS[n]}</button>`;
+          })
+          .join('')}
+      </div>
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="rf-time">Uhrzeit</label><span class="hint">optional</span></div>
+      <input type="time" id="rf-time" value="${esc(r.time || '')}">
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn primary" id="rf-save" data-id="${esc(isNew ? '' : r.id)}">
+        ${isNew ? 'Hinzufügen' : 'Speichern'}</button>
+      <button type="button" class="btn" id="rf-cancel">Abbrechen</button>
+      ${isNew ? '' : `<button type="button" class="btn small ghost" data-deactivate="${esc(r.id)}">Ausblenden</button>`}
+    </div>`;
 }
 
 /* ---------- Ansicht: Mehr ---------- */
@@ -479,8 +507,6 @@ export function renderMore() {
   const since = store.daysSinceBackup();
   const backupText =
     since == null ? 'Noch nie gesichert' : since === 0 ? 'Heute gesichert' : `Vor ${since} Tagen gesichert`;
-  const clientId = store.googleClientId();
-  const connected = calendar.isConnected();
 
   app.innerHTML = `
     <header class="view-head"><h1>Mehr</h1></header>
@@ -506,37 +532,6 @@ export function renderMore() {
       <p class="lead">Füge die App zum Startbildschirm hinzu. Auf dem iPhone ist das keine
         Bequemlichkeit, sondern Pflicht: Safari löscht die Daten von Websites nach etwa
         sieben Tagen ohne Benutzung — bei einer installierten App nicht.</p>
-    </section>
-
-    <section class="card">
-      <h2>Google Kalender</h2>
-      <p class="lead">Trägt deine aktiven Routinen mit Uhrzeit als wiederkehrende Termine in
-        deinen Google Kalender ein. Die Anmeldung läuft direkt bei Google über dein eigenes
-        Konto — ich bekomme deine Zugangsdaten nie zu sehen. Jeder Termin bekommt erstmal
-        30 Minuten; die Länge kannst du danach im Kalender selbst anpassen.</p>
-      ${
-        !clientId
-          ? `
-        <div class="field">
-          <div class="field-head"><label for="google-client-id">Google-Client-ID</label></div>
-          <input type="text" id="google-client-id" placeholder="123-abc.apps.googleusercontent.com">
-        </div>
-        <button type="button" class="btn primary" id="google-save-id">Client-ID speichern</button>
-        <p class="hint-block">Die Client-ID legst du einmalig selbst in der
-          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">
-            Google Cloud Console</a> an. Sie ist nicht geheim, bleibt aber nur auf diesem Gerät.</p>`
-          : `
-        <p class="status-line">Client-ID hinterlegt · ${esc(clientId.slice(0, 14))}…</p>
-        <div class="btn-row">
-          <button type="button" class="btn primary" id="google-connect">
-            ${connected ? 'Verbunden ✓' : 'Mit Google verbinden'}
-          </button>
-          <button type="button" class="btn" id="google-sync" ${connected ? '' : 'disabled'}>
-            Routinen eintragen
-          </button>
-        </div>
-        <button type="button" class="btn small ghost google-forget-btn" id="google-forget">Client-ID entfernen</button>`
-      }
     </section>
 
     <section class="card danger">
@@ -588,7 +583,7 @@ function updateBackupHint() {
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-mode], [data-open], [data-deactivate], [data-goto], .wd');
+  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-mode], [data-open], [data-edit], [data-deactivate], [data-goto], .wd');
   if (!t) return;
 
   if (t.dataset.tap) {
@@ -654,10 +649,17 @@ app.addEventListener('click', (e) => {
     return;
   }
 
+  if (t.dataset.edit) {
+    editingRoutine = t.dataset.edit;
+    renderRoutines();
+    return;
+  }
+
   if (t.dataset.deactivate) {
     const r = store.routines().find((x) => x.id === t.dataset.deactivate);
     if (confirm(`„${r?.name}" ausblenden? Vergangene Einträge bleiben erhalten.`)) {
       store.deactivateRoutine(t.dataset.deactivate);
+      editingRoutine = null;
       renderRoutines();
       toast('Routine ausgeblendet');
     }
@@ -697,8 +699,8 @@ app.addEventListener('input', (e) => {
 });
 
 app.addEventListener('change', (e) => {
-  if (e.target.id === 'new-routine-type') {
-    document.getElementById('new-routine-days').hidden = e.target.value !== 'anchor';
+  if (e.target.id === 'rf-type') {
+    document.getElementById('rf-days').hidden = e.target.value !== 'anchor';
   }
   if (e.target.id === 'import-file') handleImport(e.target);
 
@@ -718,22 +720,40 @@ app.addEventListener('change', (e) => {
 app.addEventListener('click', (e) => {
   const id = e.target.id;
 
-  if (id === 'add-routine') {
-    const name = document.getElementById('new-routine-name').value.trim();
+  if (id === 'new-routine') {
+    editingRoutine = NEW_ROUTINE;
+    renderRoutines();
+    document.getElementById('rf-name')?.focus();
+  }
+
+  if (id === 'rf-cancel') {
+    editingRoutine = null;
+    renderRoutines();
+  }
+
+  if (id === 'rf-save') {
+    const name = document.getElementById('rf-name').value.trim();
     if (!name) return toast('Bitte einen Namen eingeben');
-    const type = document.getElementById('new-routine-type').value;
-    const weekdays = [...document.querySelectorAll('.wd[aria-pressed="true"]')].map((b) => Number(b.dataset.wd));
+    const type = document.getElementById('rf-type').value;
+    // Wochentage nur bei festem Rhythmus - sonst bleibt eine alte Auswahl unsichtbar hängen.
+    const weekdays =
+      type === 'anchor'
+        ? [...document.querySelectorAll('.wd[aria-pressed="true"]')].map((b) => Number(b.dataset.wd))
+        : [];
     if (type === 'anchor' && !weekdays.length) return toast('Bitte mindestens einen Wochentag wählen');
+
+    const existingId = e.target.dataset.id;
     store.saveRoutine({
-      id: store.newRoutineId(name),
+      id: existingId || store.newRoutineId(name),
       name,
       type,
       weekdays,
-      time: document.getElementById('new-routine-time').value,
+      time: document.getElementById('rf-time').value,
       active: true,
     });
+    editingRoutine = null;
     renderRoutines();
-    toast('Routine hinzugefügt');
+    toast(existingId ? 'Routine geändert' : 'Routine hinzugefügt');
   }
 
   if (id === 'export') {
@@ -750,46 +770,6 @@ app.addEventListener('click', (e) => {
   }
 
   if (id === 'import-btn') document.getElementById('import-file').click();
-
-  if (id === 'google-save-id') {
-    const val = document.getElementById('google-client-id').value.trim();
-    if (!val) return toast('Bitte eine Client-ID eingeben');
-    store.setGoogleClientId(val);
-    renderMore();
-    toast('Client-ID gespeichert');
-  }
-
-  if (id === 'google-forget') {
-    calendar.disconnect();
-    store.setGoogleClientId('');
-    renderMore();
-    toast('Client-ID entfernt');
-  }
-
-  if (id === 'google-connect') {
-    calendar
-      .connect()
-      .then(() => {
-        renderMore();
-        toast('Mit Google verbunden');
-      })
-      .catch((err) => toast(`Verbindung fehlgeschlagen: ${err.message}`));
-  }
-
-  if (id === 'google-sync') {
-    toast('Trage Routinen ein …');
-    calendar
-      .syncRoutines(store.routines())
-      .then((r) => {
-        const parts = [];
-        if (r.created) parts.push(`${r.created} neu`);
-        if (r.updated) parts.push(`${r.updated} aktualisiert`);
-        if (r.skipped.length) parts.push(`${r.skipped.length} ohne Uhrzeit übersprungen`);
-        if (r.failed.length) parts.push(`${r.failed.length} fehlgeschlagen`);
-        toast(parts.join(' · ') || 'Keine aktiven Routinen');
-      })
-      .catch((err) => toast(`Fehler: ${err.message}`));
-  }
 
   if (id === 'reset') {
     if (!confirm('Wirklich ALLE Einträge löschen? Das lässt sich nicht rückgängig machen.')) return;

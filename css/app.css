@@ -356,19 +356,30 @@ button:focus-visible {
 
 /* ---------- Routinen-Verwaltung ---------- */
 
-.routine-admin { list-style: none; margin: 0 0 18px; padding: 0; }
-.routine-admin li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.routine-admin { list-style: none; margin: 0 0 12px; padding: 0; }
+.routine-admin li { margin-bottom: 8px; }
+
+.routine-row {
+  display: block;
+  width: 100%;
+  text-align: left;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 13px var(--pad);
-  margin-bottom: 8px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }
 .routine-meta { display: block; color: var(--text-dim); font-size: 0.8rem; margin-top: 3px; }
+
+.routine-editing {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: var(--pad);
+}
+.routine-editing .field:last-of-type { margin-bottom: 14px; }
 
 .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .wd {

@@ -337,13 +337,6 @@ export function setGoogleClientId(id) {
   return persist();
 }
 
-/** Merkt sich, welcher Google-Kalendertermin zu einer Routine gehört - für Updates statt Duplikate. */
-export function setRoutineEventId(routineId, eventId) {
-  const r = data.routines.find((x) => x.id === routineId);
-  if (r) r.googleEventId = eventId;
-  return persist();
-}
-
 export function markBackup() {
   data.settings.lastBackupAt = new Date().toISOString();
   persist();
