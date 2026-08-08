@@ -5,6 +5,7 @@
  */
 
 import * as store from './store.js';
+import * as drive from './drive.js';
 
 const app = document.getElementById('app');
 
@@ -413,7 +414,7 @@ function historyRow(day) {
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
 /** Routinen-ID, die gerade bearbeitet wird; NEW_ROUTINE für eine noch nicht angelegte. */
-const NEW_ROUTINE = ' neu';
+const NEW_ROUTINE = '__neu__';
 let editingRoutine = null;
 
 export function renderRoutines() {
@@ -511,6 +512,8 @@ export function renderMore() {
   app.innerHTML = `
     <header class="view-head"><h1>Mehr</h1></header>
 
+    ${driveCard()}
+
     <section class="card">
       <h2>Daten sichern</h2>
       <p class="lead">Die Einträge liegen nur in diesem Browser. Wird der Browserspeicher
@@ -541,6 +544,57 @@ export function renderMore() {
     </section>
 
     <p class="version">Stufe 1 · Daten bleiben auf diesem Gerät</p>`;
+}
+
+/** "vor 3 Minuten" / "vor 2 Stunden" — für den Sync-Status verständlicher als eine Uhrzeit. */
+function sinceText(iso) {
+  if (!iso) return 'noch nie abgeglichen';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'gerade eben abgeglichen';
+  if (mins < 60) return `vor ${mins} ${mins === 1 ? 'Minute' : 'Minuten'} abgeglichen`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `vor ${hours} ${hours === 1 ? 'Stunde' : 'Stunden'} abgeglichen`;
+  const days = Math.floor(hours / 24);
+  return `vor ${days} ${days === 1 ? 'Tag' : 'Tagen'} abgeglichen`;
+}
+
+function driveCard() {
+  const clientId = store.googleClientId();
+
+  if (!clientId) {
+    return `
+      <section class="card">
+        <h2>Google Drive</h2>
+        <p class="lead">Gleicht die Einträge über einen versteckten App-Ordner in deinem
+          eigenen Google Drive ab — damit sie ein Gerätewechsel überleben und du am Handy
+          wie am Rechner denselben Stand hast. Niemand außer dir kommt an den Ordner,
+          auch keine andere App.</p>
+        <div class="field">
+          <div class="field-head"><label for="google-client-id">Google-Client-ID</label></div>
+          <input type="text" id="google-client-id" placeholder="123-abc.apps.googleusercontent.com">
+        </div>
+        <button type="button" class="btn primary" id="google-save-id">Client-ID speichern</button>
+        <p class="hint-block">Die Client-ID legst du einmalig selbst in der
+          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">
+            Google Cloud Console</a> an — die Anleitung steht im Code-Repo unter
+          „Google Drive einrichten". Sie ist nicht geheim, bleibt aber nur auf diesem Gerät.</p>
+      </section>`;
+  }
+
+  const connected = drive.isConnected();
+  return `
+    <section class="card">
+      <h2>Google Drive</h2>
+      <p class="status-line">${connected ? 'Verbunden' : 'Nicht verbunden'} · ${esc(sinceText(store.lastSyncAt()))}</p>
+      <div class="btn-row">
+        <button type="button" class="btn primary" id="drive-sync">Jetzt abgleichen</button>
+        ${connected ? '' : '<button type="button" class="btn" id="drive-connect">Mit Google verbinden</button>'}
+      </div>
+      <p class="hint-block">Der Abgleich läuft auch automatisch beim Öffnen der App und kurz
+        nach jeder Änderung. Zusammengeführt wird pro Tag und pro Routine der jeweils
+        neuere Stand — kein Gerät überschreibt das andere.</p>
+      <button type="button" class="btn small ghost" id="google-forget">Verbindung lösen</button>
+    </section>`;
 }
 
 /* ---------- Ereignisse ---------- */
@@ -771,6 +825,48 @@ app.addEventListener('click', (e) => {
 
   if (id === 'import-btn') document.getElementById('import-file').click();
 
+  if (id === 'google-save-id') {
+    const val = document.getElementById('google-client-id').value.trim();
+    if (!val) return toast('Bitte eine Client-ID eingeben');
+    store.setGoogleClientId(val);
+    renderMore();
+    toast('Client-ID gespeichert');
+  }
+
+  if (id === 'google-forget') {
+    if (!confirm('Verbindung lösen? Die Daten in Drive bleiben erhalten, dieses Gerät gleicht nur nicht mehr ab.')) return;
+    drive.disconnect();
+    store.setGoogleClientId('');
+    renderMore();
+    toast('Verbindung gelöst');
+  }
+
+  if (id === 'drive-connect') {
+    drive
+      .connect()
+      .then(() => {
+        renderMore();
+        toast('Mit Google verbunden');
+      })
+      .catch((err) => toast(`Verbindung fehlgeschlagen: ${err.message}`));
+  }
+
+  if (id === 'drive-sync') {
+    toast('Gleiche ab …');
+    drive
+      .sync()
+      .then((r) => {
+        renderMore();
+        const parts = [];
+        if (r.added) parts.push(`${r.added} neu`);
+        if (r.updated) parts.push(`${r.updated} aktualisiert`);
+        if (r.routines) parts.push(`${r.routines} Routinen`);
+        if (r.uploaded) parts.push('hochgeladen');
+        toast(parts.length ? `Abgeglichen · ${parts.join(' · ')}` : 'Alles schon aktuell');
+      })
+      .catch((err) => toast(`Abgleich fehlgeschlagen: ${err.message}`));
+  }
+
   if (id === 'reset') {
     if (!confirm('Wirklich ALLE Einträge löschen? Das lässt sich nicht rückgängig machen.')) return;
     if (!confirm('Sicher? Ohne Sicherung sind die Daten endgültig weg.')) return;
@@ -804,6 +900,22 @@ export function flush() {
     saveTimer = null;
     if (currentDay) store.saveDay(currentDay);
   }
+}
+
+/**
+ * Abgleich im Hintergrund. Fehler bleiben absichtlich stumm: Wer gerade einen
+ * Eintrag tippt, soll nicht von einer Fehlermeldung über eine fehlende
+ * Internetverbindung unterbrochen werden. Sichtbar wird der Zustand unter "Mehr".
+ */
+export function autoSync() {
+  if (!drive.isConfigured()) return;
+  drive
+    .sync()
+    .then(() => {
+      // Nur neu zeichnen, wenn die Sync-Ansicht gerade offen ist.
+      if (document.getElementById('drive-sync')) renderMore();
+    })
+    .catch(() => {});
 }
 
 export { toast };

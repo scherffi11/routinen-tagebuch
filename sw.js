@@ -6,7 +6,7 @@
  * die alte Version serviert.
  */
 
-const CACHE = 'routinen-tagebuch-v8';
+const CACHE = 'routinen-tagebuch-v9';
 
 const SHELL = [
   '.',
@@ -15,6 +15,7 @@ const SHELL = [
   'js/app.js',
   'js/store.js',
   'js/views.js',
+  'js/drive.js',
   'manifest.webmanifest',
   'icons/icon.svg',
 ];

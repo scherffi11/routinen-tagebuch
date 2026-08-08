@@ -35,10 +35,17 @@ window.addEventListener('goto', (e) => show(e.detail.view, e.detail.date));
 // Der Browser kann die Seite jederzeit einfrieren - vorher schreiben.
 window.addEventListener('pagehide', views.flush);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') views.flush();
+  if (document.visibilityState === 'hidden') {
+    views.flush();
+    views.autoSync();
+  } else {
+    // Zurück in der App: erst holen, was auf dem anderen Gerät entstanden ist.
+    views.autoSync();
+  }
 });
 
 show('today');
+views.autoSync();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

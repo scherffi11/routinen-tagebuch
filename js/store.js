@@ -299,9 +299,10 @@ export function routinesForDate(date) {
 }
 
 export function saveRoutine(routine) {
+  const stamped = { ...routine, updatedAt: new Date().toISOString() };
   const idx = data.routines.findIndex((r) => r.id === routine.id);
-  if (idx >= 0) data.routines[idx] = { ...data.routines[idx], ...routine };
-  else data.routines.push({ active: true, ...routine });
+  if (idx >= 0) data.routines[idx] = { ...data.routines[idx], ...stamped };
+  else data.routines.push({ active: true, ...stamped });
   return persist();
 }
 
@@ -311,7 +312,10 @@ export function saveRoutine(routine) {
  */
 export function deactivateRoutine(id) {
   const r = data.routines.find((x) => x.id === id);
-  if (r) r.active = false;
+  if (r) {
+    r.active = false;
+    r.updatedAt = new Date().toISOString();
+  }
   return persist();
 }
 
@@ -337,6 +341,26 @@ export function setGoogleClientId(id) {
   return persist();
 }
 
+export function lastSyncAt() {
+  return data.settings.lastSyncAt || null;
+}
+
+export function markSync() {
+  data.settings.lastSyncAt = new Date().toISOString();
+  return persist();
+}
+
+/**
+ * Zeitstempel der jüngsten Änderung im gesamten Bestand. Der Sync vergleicht ihn
+ * mit dem Stand nach dem Zusammenführen, um zu erkennen, ob hochgeladen werden muss.
+ */
+export function latestChange() {
+  let latest = '';
+  for (const d of Object.values(data.days)) if ((d.updatedAt || '') > latest) latest = d.updatedAt;
+  for (const r of data.routines) if ((r.updatedAt || '') > latest) latest = r.updatedAt;
+  return latest;
+}
+
 export function markBackup() {
   data.settings.lastBackupAt = new Date().toISOString();
   persist();
@@ -354,9 +378,28 @@ export function exportJSON() {
 }
 
 /**
- * Import. Zusammenführen statt Ersetzen: vorhandene Tage bleiben, es sei denn
- * der importierte Eintrag ist neuer. So kann ein Backup nichts überschreiben,
- * was inzwischen frisch erfasst wurde.
+ * Fassung für den Drive-Abgleich. Enthält bewusst nur Tage und Routinen:
+ *
+ * `settings` und `createdAt` sind geräteeigen (wann wurde die App HIER angelegt,
+ * wann zuletzt abgeglichen) und unterscheiden sich zwischen zwei Geräten immer.
+ * Wären sie enthalten, würde jeder Abgleich einen Unterschied sehen und ewig
+ * hochladen. Die Schlüssel werden sortiert, damit derselbe Inhalt auch
+ * denselben Text ergibt.
+ */
+export function syncJSON() {
+  const days = {};
+  for (const date of Object.keys(data.days).sort()) days[date] = data.days[date];
+  const routines = [...data.routines].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return JSON.stringify({ schemaVersion: SCHEMA_VERSION, days, routines }, null, 2);
+}
+
+/**
+ * Zusammenführen statt Ersetzen: pro Tag und pro Routine gewinnt die zuletzt
+ * geänderte Fassung. So kann weder ein Backup noch ein zweites Gerät etwas
+ * überschreiben, was inzwischen frisch erfasst wurde.
+ *
+ * `changed` sagt, ob am lokalen Bestand etwas verändert wurde — der Sync
+ * entscheidet daran, ob er die zusammengeführte Fassung hochladen muss.
  */
 export function importJSON(text) {
   const incoming = migrate(JSON.parse(text));
@@ -376,13 +419,20 @@ export function importJSON(text) {
     }
   }
 
-  // Unbekannte Routinen ergänzen, bekannte unangetastet lassen.
+  let routinesChanged = 0;
   for (const r of incoming.routines || []) {
-    if (!data.routines.some((x) => x.id === r.id)) data.routines.push(r);
+    const idx = data.routines.findIndex((x) => x.id === r.id);
+    if (idx < 0) {
+      data.routines.push(r);
+      routinesChanged++;
+    } else if ((r.updatedAt || '') > (data.routines[idx].updatedAt || '')) {
+      data.routines[idx] = r;
+      routinesChanged++;
+    }
   }
 
   persist();
-  return { added, updated, skipped };
+  return { added, updated, skipped, routines: routinesChanged, changed: added + updated + routinesChanged > 0 };
 }
 
 export function resetAll() {
