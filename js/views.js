@@ -298,16 +298,19 @@ function lineChart(values, { min, max, color, label }) {
     aria-label="${esc(label)}">${lines}${dots}</svg>`;
 }
 
-/** Letzter Wert plus Veränderung zum vorletzten — die Zahl, die man zuerst sucht. */
-function trendBadge(values, suffix = '') {
+/**
+ * Letzter Wert plus Veränderung zum vorletzten — die Zahl, die man zuerst sucht.
+ * Die Sparklines zeigen nur den Wert: auf der 1–5-Skala wäre ein "▲ 1" mehr
+ * Balken als Aussage.
+ */
+function trendBadge(values, withDelta = true) {
   const seen = values.filter((v) => v != null);
   if (!seen.length) return '<span class="chart-value">—</span>';
   const last = seen.at(-1);
-  const prev = seen.length > 1 ? seen.at(-2) : null;
-  const delta = prev == null ? null : last - prev;
-  const arrow = delta == null || delta === 0 ? '' :
-    `<span class="chart-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}${suffix}</span>`;
-  return `<span class="chart-value">${last}${suffix}</span>${arrow}`;
+  const delta = seen.length > 1 ? last - seen.at(-2) : 0;
+  const arrow = !withDelta || delta === 0 ? '' :
+    `<span class="chart-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}</span>`;
+  return `<span class="chart-value">${last}</span>${arrow}`;
 }
 
 function chartCard(title, hint, values, dates, opts) {
@@ -318,7 +321,7 @@ function chartCard(title, hint, values, dates, opts) {
           <h2>${esc(title)}</h2>
           ${hint ? `<p class="chart-hint">${esc(hint)}</p>` : ''}
         </div>
-        <div class="chart-figures">${trendBadge(values, opts.suffix ?? '')}</div>
+        <div class="chart-figures">${trendBadge(values)}</div>
       </div>
       ${lineChart(values, { ...opts, label: `${title}: Verlauf über ${values.length} Tage` })}
       <div class="chart-axis">
@@ -356,7 +359,7 @@ export function renderHistory() {
       <div class="spark">
         <div class="spark-head">
           <span>${esc(label)}</span>
-          ${trendBadge(values)}
+          ${trendBadge(values, false)}
         </div>
         ${lineChart(values, { min: 1, max: 5, color, label: `${label}: Verlauf` })}
       </div>`;

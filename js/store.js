@@ -117,7 +117,7 @@ export function relativeDate(iso) {
 
 /* ---------- Tageseinträge ---------- */
 
-export function emptyDay(date) {
+function emptyDay(date) {
   return {
     date,
     // sport: Sport-Intensität an Tag X-1, dem Tag vor dieser Nacht (nicht Tag X).
@@ -153,32 +153,23 @@ export function saveDay(day) {
   return persist();
 }
 
-export function deleteDay(date) {
-  delete data.days[date];
-  return persist();
-}
-
-export function hasEntry(date) {
-  return Boolean(data.days[date]);
+export function dayCount() {
+  return Object.keys(data.days).length;
 }
 
 /** Alle Einträge, neueste zuerst. */
-export function allDays() {
+function allDays() {
   return Object.keys(data.days)
     .sort()
     .reverse()
     .map((d) => getDay(d));
 }
 
-export function dayCount() {
-  return Object.keys(data.days).length;
-}
-
 /**
  * Ein Eintrag zählt als ausgefüllt, sobald irgendetwas Substanzielles drinsteht.
  * Bewusst großzügig: ein Tag mit nur einer Stimmungsangabe ist besser als kein Tag.
  */
-export function isFilled(day) {
+function isFilled(day) {
   const s = day.sleep, m = day.mood, i = day.intake;
   return Boolean(
     s.rested || s.bedtime || s.wakeAt || s.onset || s.wakeUp || s.sport || s.awakenings ||
@@ -192,7 +183,7 @@ export function isFilled(day) {
 /* ---------- Schlafdauer ---------- */
 
 /** Geschätzte Minuten bis zum Einschlafen, je nach gewählter Geschwindigkeit. */
-export const ONSET_MINUTES = { fast: 5, medium: 20, slow: 45 };
+const ONSET_MINUTES = { fast: 5, medium: 20, slow: 45 };
 
 /**
  * Geschätzte Schlafdauer in Minuten: Zeit im Bett minus die für die gewählte
@@ -328,10 +319,6 @@ export function newRoutineId(name) {
 
 /* ---------- Einstellungen, Sicherung ---------- */
 
-export function settings() {
-  return data.settings;
-}
-
 export function googleClientId() {
   return data.settings.google?.clientId || '';
 }
@@ -348,17 +335,6 @@ export function lastSyncAt() {
 export function markSync() {
   data.settings.lastSyncAt = new Date().toISOString();
   return persist();
-}
-
-/**
- * Zeitstempel der jüngsten Änderung im gesamten Bestand. Der Sync vergleicht ihn
- * mit dem Stand nach dem Zusammenführen, um zu erkennen, ob hochgeladen werden muss.
- */
-export function latestChange() {
-  let latest = '';
-  for (const d of Object.values(data.days)) if ((d.updatedAt || '') > latest) latest = d.updatedAt;
-  for (const r of data.routines) if ((r.updatedAt || '') > latest) latest = r.updatedAt;
-  return latest;
 }
 
 export function markBackup() {
@@ -397,9 +373,6 @@ export function syncJSON() {
  * Zusammenführen statt Ersetzen: pro Tag und pro Routine gewinnt die zuletzt
  * geänderte Fassung. So kann weder ein Backup noch ein zweites Gerät etwas
  * überschreiben, was inzwischen frisch erfasst wurde.
- *
- * `changed` sagt, ob am lokalen Bestand etwas verändert wurde — der Sync
- * entscheidet daran, ob er die zusammengeführte Fassung hochladen muss.
  */
 export function importJSON(text) {
   const incoming = migrate(JSON.parse(text));
@@ -432,7 +405,7 @@ export function importJSON(text) {
   }
 
   persist();
-  return { added, updated, skipped, routines: routinesChanged, changed: added + updated + routinesChanged > 0 };
+  return { added, updated, skipped, routines: routinesChanged };
 }
 
 export function resetAll() {

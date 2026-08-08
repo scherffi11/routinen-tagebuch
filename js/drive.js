@@ -146,7 +146,7 @@ export async function sync() {
     if (!isConnected()) await connect({ silent: true });
 
     const id = await findFile();
-    let merged = { changed: false };
+    let merged = {};
     let remoteText = null;
 
     if (id) {

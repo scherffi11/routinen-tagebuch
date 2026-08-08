@@ -315,7 +315,6 @@ button:focus-visible {
   margin-bottom: 2px;
 }
 .spark .chart-value { font-size: 0.95rem; color: var(--text); }
-.spark .chart-delta { display: none; }
 
 .history-details { margin-top: 4px; }
 .history-details summary {
