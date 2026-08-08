@@ -262,19 +262,127 @@ function daySection(d, routineList) {
 
 /* ---------- Ansicht: Historie ---------- */
 
+const CHART_W = 300, CHART_H = 72, CHART_PAD = 7;
+
+/**
+ * Kleines Liniendiagramm als Inline-SVG — keine Bibliothek, passend zum Rest der App.
+ * Lücken werden nicht überbrückt, sondern trennen die Linie: eine durchgezogene Linie
+ * über einen Tag ohne Eintrag hinweg würde Daten suggerieren, die es nicht gibt.
+ */
+function lineChart(values, { min, max, color, label }) {
+  const n = values.length;
+  const innerW = CHART_W - CHART_PAD * 2;
+  const innerH = CHART_H - CHART_PAD * 2;
+  const px = (i) => (n === 1 ? CHART_W / 2 : CHART_PAD + (i / (n - 1)) * innerW);
+  const py = (v) => CHART_PAD + (1 - (v - min) / (max - min)) * innerH;
+
+  const segments = [];
+  let run = [];
+  values.forEach((v, i) => {
+    if (v == null) { if (run.length) segments.push(run); run = []; return; }
+    run.push(`${px(i).toFixed(1)},${py(v).toFixed(1)}`);
+  });
+  if (run.length) segments.push(run);
+
+  const lines = segments
+    .filter((s) => s.length > 1)
+    .map((s) => `<polyline points="${s.join(' ')}" fill="none" stroke="${color}"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`)
+    .join('');
+
+  const dots = values
+    .map((v, i) => (v == null ? '' : `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="2.4" fill="${color}"/>`))
+    .join('');
+
+  return `<svg class="chart" viewBox="0 0 ${CHART_W} ${CHART_H}" role="img"
+    aria-label="${esc(label)}">${lines}${dots}</svg>`;
+}
+
+/** Letzter Wert plus Veränderung zum vorletzten — die Zahl, die man zuerst sucht. */
+function trendBadge(values, suffix = '') {
+  const seen = values.filter((v) => v != null);
+  if (!seen.length) return '<span class="chart-value">—</span>';
+  const last = seen.at(-1);
+  const prev = seen.length > 1 ? seen.at(-2) : null;
+  const delta = prev == null ? null : last - prev;
+  const arrow = delta == null || delta === 0 ? '' :
+    `<span class="chart-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}${suffix}</span>`;
+  return `<span class="chart-value">${last}${suffix}</span>${arrow}`;
+}
+
+function chartCard(title, hint, values, dates, opts) {
+  return `
+    <section class="card chart-card">
+      <div class="chart-head">
+        <div>
+          <h2>${esc(title)}</h2>
+          ${hint ? `<p class="chart-hint">${esc(hint)}</p>` : ''}
+        </div>
+        <div class="chart-figures">${trendBadge(values, opts.suffix ?? '')}</div>
+      </div>
+      ${lineChart(values, { ...opts, label: `${title}: Verlauf über ${values.length} Tage` })}
+      <div class="chart-axis">
+        <span>${esc(store.formatDate(dates[0], { day: '2-digit', month: 'short' }))}</span>
+        <span>${esc(store.formatDate(dates.at(-1), { day: '2-digit', month: 'short' }))}</span>
+      </div>
+    </section>`;
+}
+
+const MOOD_SPARKS = [
+  ['mood', 'Stimmung', 'var(--accent)'],
+  ['energy', 'Energie', 'var(--ok)'],
+  ['stress', 'Stress', 'var(--danger)'],
+  ['focus', 'Konzentration', 'var(--accent)'],
+];
+
 export function renderHistory() {
-  const days = store.allDays().filter(store.isFilled);
+  const days = store.trendDays();
+
+  if (!days.length) {
+    app.innerHTML = `
+      <header class="view-head"><h1>Verlauf</h1></header>
+      <p class="empty">Noch keine Einträge. Trage heute Abend den ersten ein —
+        die Auswertung braucht ein paar Wochen Daten, also je früher desto besser.</p>`;
+    return;
+  }
+
+  const dates = days.map((d) => d.date);
+  const sleep = days.map(store.sleepScore);
+  const mood = days.map(store.moodScore);
+
+  const sparks = MOOD_SPARKS.map(([key, label, color]) => {
+    const values = days.map((d) => d.mood[key]);
+    return `
+      <div class="spark">
+        <div class="spark-head">
+          <span>${esc(label)}</span>
+          ${trendBadge(values)}
+        </div>
+        ${lineChart(values, { min: 1, max: 5, color, label: `${label}: Verlauf` })}
+      </div>`;
+  }).join('');
 
   app.innerHTML = `
     <header class="view-head"><h1>Verlauf</h1>
-      <span class="count">${days.length} ${days.length === 1 ? 'Eintrag' : 'Einträge'}</span>
+      <span class="count">${days.length} ${days.length === 1 ? 'Tag' : 'Tage'}</span>
     </header>
-    ${
-      days.length
-        ? `<ul class="history">${days.map(historyRow).join('')}</ul>`
-        : `<p class="empty">Noch keine Einträge. Trage heute Abend den ersten ein —
-           die Auswertung braucht ein paar Wochen Daten, also je früher desto besser.</p>`
-    }`;
+
+    ${chartCard('Schlafscore', 'aus Erholung, Dauer, Durchschlafen, Einschlafen und Aufstehen',
+      sleep, dates, { min: 0, max: 100, color: 'var(--accent)' })}
+
+    ${chartCard('Befinden', 'Stimmung, Energie und Konzentration; Stress zieht herunter',
+      mood, dates, { min: 0, max: 100, color: 'var(--ok)' })}
+
+    <section class="card">
+      <h2>Einzelwerte</h2>
+      <div class="spark-grid">${sparks}</div>
+      <p class="chart-hint">Skala 1–5. Bei Stress ist niedrig das Gute.</p>
+    </section>
+
+    <details class="history-details">
+      <summary>Einzelne Einträge (${days.length})</summary>
+      <ul class="history">${days.slice().reverse().map(historyRow).join('')}</ul>
+    </details>`;
 }
 
 function historyRow(day) {

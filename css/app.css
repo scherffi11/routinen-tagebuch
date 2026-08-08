@@ -273,7 +273,63 @@ button:focus-visible {
 .check-label { flex: 1; }
 .routine-time { color: var(--text-dim); font-size: 0.8rem; margin-left: 8px; }
 
-/* ---------- Verlauf ---------- */
+/* ---------- Verlauf: Diagramme ---------- */
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.chart-card { padding-bottom: 10px; }
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.chart-head h2 { margin: 0; }
+.chart-hint { margin: 3px 0 0; font-size: 0.76rem; color: var(--text-dim); line-height: 1.35; }
+.chart-figures { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.chart-value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-delta { font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.chart-delta.up { color: var(--ok); }
+.chart-delta.down { color: var(--danger); }
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.spark-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.spark-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.spark .chart-value { font-size: 0.95rem; color: var(--text); }
+.spark .chart-delta { display: none; }
+
+.history-details { margin-top: 4px; }
+.history-details summary {
+  padding: 13px var(--pad);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+.history-details[open] summary { margin-bottom: 8px; }
+
+/* ---------- Verlauf: Einträge ---------- */
 
 .history { list-style: none; margin: 0; padding: 0; }
 .history li { margin-bottom: 8px; }

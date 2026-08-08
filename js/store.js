@@ -217,6 +217,72 @@ export function formatDuration(mins) {
   return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')} h`;
 }
 
+/* ---------- Scores für den Verlauf ---------- */
+
+/**
+ * Fasst mehrere Teilangaben zu einer Zahl von 0-100 zusammen.
+ *
+ * Fehlende Angaben werden aus der Rechnung genommen statt als schlecht gewertet —
+ * sonst bekäme ein halb ausgefüllter Tag automatisch einen miesen Score und der
+ * Verlauf zeigte Einbrüche, die nur Lücken sind.
+ */
+function weightedScore(parts) {
+  const usable = parts.filter(([, value]) => value != null);
+  if (!usable.length) return null;
+  const weight = usable.reduce((sum, [w]) => sum + w, 0);
+  const points = usable.reduce((sum, [w, value]) => sum + w * value, 0);
+  return Math.round((points / weight) * 100);
+}
+
+/** 1-5-Skala auf 0-1. Höher ist besser. */
+const fromScale = (v) => (v ? (v - 1) / 4 : null);
+
+const ONSET_SCORE = { fast: 1, medium: 0.6, slow: 0.2 };
+const AWAKENINGS_SCORE = { none: 1, once: 0.6, multiple: 0.2 };
+const WAKEUP_SCORE = { immediate: 1, snooze: 0.5 };
+
+/** 7 bis 8,5 h zählen voll; darunter fällt es steil ab, zu viel Schlaf nur leicht. */
+function durationScore(mins) {
+  if (mins == null) return null;
+  const h = mins / 60;
+  if (h < 4) return 0;
+  if (h < 7) return (h - 4) / 3;
+  if (h <= 8.5) return 1;
+  if (h <= 10) return 1 - ((h - 8.5) / 1.5) * 0.3;
+  return 0.7;
+}
+
+/**
+ * "Erholt aufgewacht" wiegt am schwersten: Zeiten und Häufigkeiten sind Indizien,
+ * aber wie man sich morgens fühlt, ist das eigentliche Ergebnis.
+ */
+export function sleepScore(day) {
+  const s = day.sleep;
+  return weightedScore([
+    [40, fromScale(s.rested)],
+    [25, durationScore(sleepMinutes(s))],
+    [15, s.awakenings ? AWAKENINGS_SCORE[s.awakenings] ?? null : null],
+    [12, s.onset ? ONSET_SCORE[s.onset] ?? null : null],
+    [8, s.wakeUp ? WAKEUP_SCORE[s.wakeUp] ?? null : null],
+  ]);
+}
+
+/** Stress geht invertiert ein: viel Stress drückt das Gesamtbefinden. */
+export function moodScore(day) {
+  const m = day.mood;
+  return weightedScore([
+    [40, fromScale(m.mood)],
+    [25, fromScale(m.energy)],
+    [20, fromScale(m.focus)],
+    [15, m.stress ? 1 - fromScale(m.stress) : null],
+  ]);
+}
+
+/** Einträge mit Inhalt, älteste zuerst — so, wie ein Verlauf gelesen wird. */
+export function trendDays() {
+  return allDays().filter(isFilled).reverse();
+}
+
 /* ---------- Routinen ---------- */
 
 export function routines({ activeOnly = true } = {}) {
