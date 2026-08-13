@@ -47,6 +47,20 @@ document.addEventListener('visibilitychange', () => {
 show('today');
 views.autoSync();
 
+/*
+ * Bittet den Browser, den Speicher dieser App dauerhaft zu behalten. Schützt vor
+ * dem automatischen Aufräumen bei Speicherdruck und vor Safaris 7-Tage-Regel.
+ *
+ * Schützt NICHT davor, dass der Nutzer selbst den Browserverlauf löscht - das
+ * kann keine Web-App verhindern. Dagegen hilft nur eine Sicherung außerhalb des
+ * Browsers, siehe Warnhinweis in der Erfassung.
+ */
+if (navigator.storage?.persist) {
+  navigator.storage.persisted().then((already) => {
+    if (!already) navigator.storage.persist();
+  });
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW:', err));

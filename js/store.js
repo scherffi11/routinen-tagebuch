@@ -342,6 +342,16 @@ export function markBackup() {
   persist();
 }
 
+/**
+ * Ist überhaupt irgendeine Sicherung eingerichtet? Entweder ein laufender
+ * Drive-Abgleich oder mindestens ein Export. Ist beides nie passiert, liegen
+ * die Daten ausschließlich im Browserspeicher — und der ist mit dem Löschen
+ * des Browserverlaufs weg.
+ */
+export function hasAnyBackup() {
+  return Boolean(data.settings.lastBackupAt || data.settings.lastSyncAt);
+}
+
 /** Tage seit der letzten Sicherung, oder null wenn noch nie gesichert. */
 export function daysSinceBackup() {
   const last = data.settings.lastBackupAt;

@@ -623,20 +623,43 @@ function refreshDuration() {
   if (el) el.textContent = store.formatDuration(store.sleepMinutes(currentDay.sleep));
 }
 
+/**
+ * Warnt, solange die Daten nur im Browserspeicher liegen.
+ *
+ * Bewusst aufdringlich und ab dem ersten Eintrag: Wer den Browserverlauf löscht,
+ * löscht auch den localStorage - ohne Vorwarnung und ohne Papierkorb. Diese
+ * Warnung ist einmal zu spät gekommen, das reicht.
+ */
 function updateBackupHint() {
   const box = document.querySelector('.backup-hint');
   if (!box) return;
-  const since = store.daysSinceBackup();
   const count = store.dayCount();
-  // Erst ab ein paar Einträgen nerven - vorher gibt es nichts zu verlieren.
-  if (count >= 3 && (since == null || since >= 7)) {
+  if (count === 0) { box.hidden = true; return; }
+
+  const since = store.daysSinceBackup();
+  const syncOn = Boolean(store.lastSyncAt());
+
+  if (!store.hasAnyBackup()) {
     box.hidden = false;
-    box.innerHTML = `Deine letzte Sicherung ist ${
-      since == null ? 'noch nie erfolgt' : `${since} Tage her`
-    }. <button type="button" class="link" data-goto="more">Jetzt sichern</button>`;
-  } else {
-    box.hidden = true;
+    box.className = 'backup-hint urgent';
+    box.innerHTML =
+      `<strong>Diese Einträge sind noch nirgends gesichert.</strong> Sie liegen nur in
+       diesem Browser und verschwinden, sobald du den Browserverlauf löschst.
+       <button type="button" class="link" data-goto="more">Jetzt einrichten</button>`;
+    return;
   }
+
+  // Läuft der Drive-Abgleich, ist alles Weitere überflüssig - der sichert von selbst.
+  if (syncOn) { box.hidden = true; return; }
+
+  if (since >= 3) {
+    box.hidden = false;
+    box.className = 'backup-hint';
+    box.innerHTML = `Letzte Sicherung vor ${since} Tagen.
+      <button type="button" class="link" data-goto="more">Jetzt sichern</button>`;
+    return;
+  }
+  box.hidden = true;
 }
 
 app.addEventListener('click', (e) => {

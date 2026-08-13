@@ -6,7 +6,7 @@
  * die alte Version serviert.
  */
 
-const CACHE = 'routinen-tagebuch-v9';
+const CACHE = 'routinen-tagebuch-v10';
 
 const SHELL = [
   '.',

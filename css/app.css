@@ -442,6 +442,16 @@ button:focus-visible {
   text-align: center;
 }
 
+/* Ungesicherte Daten: muss ins Auge fallen, nicht höflich am Rand stehen. */
+.backup-hint.urgent {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
+  text-align: left;
+  line-height: 1.5;
+}
+.backup-hint.urgent strong { display: block; margin-bottom: 4px; }
+.backup-hint.urgent .link { color: var(--danger); font-weight: 600; }
+
 /* ---------- Tab-Leiste ---------- */
 
 .tabs {
