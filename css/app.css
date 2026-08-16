@@ -97,6 +97,10 @@ h2 { font-size: 1.0rem; margin: 0 0 14px; letter-spacing: -0.01em; }
   margin: 0 0 18px;
 }
 .mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: 52px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -109,6 +113,21 @@ h2 { font-size: 1.0rem; margin: 0 0 14px; letter-spacing: -0.01em; }
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .mode-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Fortschritt: zeigt, was in der anderen Maske noch offen ist. */
+.mode-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.mode-badge.done { background: var(--ok); color: #12141c; }
+.mode-btn.on .mode-badge { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.mode-btn.on .mode-badge.done { background: #fff; color: var(--accent); }
+@media (prefers-color-scheme: light) { .mode-badge.done { color: #fff; } }
 
 /* ---------- Karten ---------- */
 
@@ -173,9 +192,18 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-/* ---------- Skala 1–5 ---------- */
+/* ---------- Bewertungsskala ---------- */
 
-.scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+/*
+ * Stufenzahl kommt aus --steps (5 bei Altdaten, 6 bei neuen Einträgen). Bei sechs
+ * Feldern bleiben auf einem 375px-Display rund 50px pro Taste - knapp über der
+ * Mindestgröße, deshalb die etwas kleinere Schrift und der schmalere Abstand.
+ */
+.scale {
+  display: grid;
+  grid-template-columns: repeat(var(--steps, 6), 1fr);
+  gap: 6px;
+}
 
 .scale-btn {
   min-height: 52px;
@@ -183,17 +211,27 @@ button:focus-visible {
   background: var(--surface-2);
   color: var(--text-dim);
   border-radius: 10px;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.scale-btn.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
+
+/*
+ * Die Hälften sichtbar machen: Es gibt keine Mitte, in die man ausweichen kann.
+ * Im Ruhezustand nur ein Hauch Farbe, damit die Skala nicht wie eine Ampel wirkt -
+ * die Richtung soll erkennbar sein, ohne die Antwort vorzugeben.
+ */
+.scale-btn.neg { background: color-mix(in srgb, var(--danger) 7%, var(--surface-2)); }
+.scale-btn.pos { background: color-mix(in srgb, var(--ok) 7%, var(--surface-2)); }
+
+/* Luft zwischen negativer und positiver Hälfte. */
+.scale-btn.mid-break { margin-right: 7px; }
+
+/* Dunkel ist der Standard, dort sind --ok und --danger hell: dunkler Text darauf. */
+.scale-btn.on { color: #12141c; font-weight: 600; }
+.scale-btn.neg.on { background: var(--danger); border-color: var(--danger); }
+.scale-btn.pos.on { background: var(--ok); border-color: var(--ok); }
 @media (prefers-color-scheme: light) { .scale-btn.on { color: #fff; } }
 
 .scale-ends {
@@ -223,6 +261,43 @@ button:focus-visible {
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .tap-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+/* ---------- Zeitfeld mit Vorschlägen ---------- */
+
+.time-chips {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 4), 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.time-chips:empty { display: none; }
+.time-chip {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.time-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+.time-row { display: flex; align-items: stretch; gap: 6px; }
+.time-row input[type="time"] { flex: 1; min-width: 0; }
+.time-step {
+  flex: 0 0 52px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
 
 .duration {
   background: var(--surface-2);
@@ -421,6 +496,18 @@ button:focus-visible {
   cursor: pointer;
   padding: 0;
 }
+
+.snapshot-list { list-style: none; margin: 0; padding: 0; }
+.snapshot-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+.snapshot-list li + li { border-top: 1px solid var(--line); }
 
 .status-line { font-size: 0.86rem; color: var(--text-dim); margin: 0 0 14px; }
 .hint-block { font-size: 0.8rem; color: var(--text-dim); margin: 12px 0 0; }

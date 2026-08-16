@@ -1,7 +1,7 @@
 /** Einstieg: Navigation zwischen den Ansichten, Service Worker, Speichern beim Verlassen. */
 
 import * as views from './views.js';
-import { isoDate } from './store.js';
+import { isoDate, takeSnapshot } from './store.js';
 
 const VIEWS = {
   today: views.renderToday,
@@ -46,6 +46,10 @@ document.addEventListener('visibilitychange', () => {
 
 show('today');
 views.autoSync();
+
+// Abzug im Browserspeicher, höchstens einmal am Tag. Fängt zerschossene Daten ab,
+// ersetzt aber keine Sicherung - siehe Hinweis unter "Mehr".
+takeSnapshot();
 
 /*
  * Bittet den Browser, den Speicher dieser App dauerhaft zu behalten. Schützt vor

@@ -37,8 +37,8 @@ Apps nicht lesbar. **Nichts landet im Repo**, es gibt weiterhin keinen eigenen S
 
 Ohne Abgleich gilt: Wird der Browserspeicher geleert, sind die Daten weg. Dann
 regelmäßig über *Mehr → Sicherung herunterladen* exportieren und die Datei ins
-**private** OneDrive legen — nicht in das des Arbeitgebers. Gesundheits- und
-Stimmungsdaten sind besondere Daten nach Art. 9 DSGVO.
+**private** OneDrive legen — nicht in das des Arbeitgebers. Gesundheits-, Stimmungs-
+und Sexualdaten sind besondere Daten nach Art. 9 DSGVO.
 
 ### Wie der Abgleich zusammenführt
 
@@ -85,17 +85,56 @@ Apps nicht.
 Ein Eintrag für Datum X enthält
 
 - den Schlaf der Nacht **X-1 → X** ("letzte Nacht") und
-- Befinden und Routinen **des Tages X**.
+- Befinden, Aktivität und Routinen **des Tages X**.
 
 Beim Abendeintrag ist beides frisch im Kopf. Für die spätere Auswertung heißt das:
-Routinen von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht. Aus demselben
-Grund bezieht sich das Sport-Feld in der Schlaf-Maske auf Tag X-1, nicht auf Tag X.
+Routinen und Sport von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht.
+
+Die Faustregel für neue Felder: Was **tagsüber** passiert (Sport, Tageslicht, sozialer
+Kontakt), steht im Tag. Was zur **Nacht** gehört, steht im Schlaf desselben Eintrags —
+auch Sex, denn es liegt zeitlich vor genau dieser Nacht und nicht vor der nächsten.
+
+Bis August 2026 lag das Sport-Feld in der Schlaf-Maske und meinte trotzdem den Vortag.
+Diese Sonderregel ist weg; die Migration auf Schema 2 hat die Werte in den Tag verschoben,
+an dem der Sport stattgefunden hat.
 
 Die Erfassung ist in zwei Masken geteilt — **Schlaf** (morgens ausfüllbar, sobald man
-aufgewacht ist) und **Tag** (abends, für Stimmung/Routinen/Konsum/Notiz). Ein Umschalter
-oben in der Erfassung wechselt zwischen beiden; welche zuerst angezeigt wird, richtet sich
-nach der Tageszeit (vor 12 Uhr Schlaf, sonst Tag). Beide Masken schreiben in denselben
-Tageseintrag, es gibt keine getrennte Datenstruktur dafür.
+aufgewacht ist) und **Tag** (abends, für Stimmung/Aktivität/Routinen/Konsum/Notiz). Ein
+Umschalter oben in der Erfassung wechselt zwischen beiden; welche zuerst angezeigt wird,
+richtet sich nach der Tageszeit (vor 12 Uhr Schlaf, sonst Tag). Beide Masken schreiben in
+denselben Tageseintrag, es gibt keine getrennte Datenstruktur dafür. Am Umschalter zeigt ein
+kleiner Zähler, wie viel in der jeweiligen Maske noch offen ist.
+
+Quer wischen wechselt den Tag; die Pfeile oben bleiben. Die Schwellen sind streng gesetzt
+(60 px waagerecht, deutlich flacher als steil), damit beim Scrollen durch eine lange Maske
+nicht versehentlich der Tag umspringt.
+
+## Bewertungsskala
+
+Sechs Stufen, **keine neutrale Mitte**: 1–3 ist die negative Hälfte, 4–6 die positive.
+Bei fünf Stufen war die 3 ein Ausweg, mit dem ein Tag ohne Vorzeichen blieb.
+
+Einträge von vor August 2026 wurden umgerechnet: die Zahl bleibt stehen (eine alte 3 zählt
+jetzt zur negativen Hälfte), nur die 5 wird zur 6 — sie war der Höchstwert und muss der
+Höchstwert bleiben. Jeder Eintrag trägt sein `scaleMax` mit, damit eine alte Sicherungsdatei
+beim Einlesen dieselbe Umrechnung durchläuft.
+
+## Sicherung
+
+Drei Ebenen, absteigend nach Verlässlichkeit:
+
+1. **Google-Drive-Abgleich** — das einzige echte automatische Backup, siehe oben.
+2. **Automatische Datei alle 3 Tage** — die App legt eine JSON-Datei im Ordner *Download*
+   ab. Ausgelöst wird sie vom nächsten Fingertipp, nicht von einer Uhr: Ein Browser darf
+   nur aus einer laufenden Nutzergeste heraus schreiben, zeitgesteuerte Downloads gibt es
+   im Web nicht. Chrome fragt beim zweiten Mal einmalig nach der Erlaubnis für mehrere
+   Dateien. Abschaltbar unter *Mehr → Automatisch sichern*.
+3. **Zwischenstände** — drei rollierende Abzüge im localStorage, höchstens einer pro Tag.
+   Das ist **keine** Sicherung: Sie liegen im selben Speicher wie die Daten. Sie helfen
+   gegen zerschossene Einträge, nicht gegen einen geleerten Browser.
+
+Achtung beim Ordner *Download*: Auf Android lesen ihn andere Apps mit. Wer Schlaf-, Stimmungs-
+und Intimdaten dort nicht liegen haben will, schaltet Ebene 2 ab und nutzt den Drive-Abgleich.
 
 ## Stand
 
@@ -103,6 +142,10 @@ Tageseintrag, es gibt keine getrennte Datenstruktur dafür.
 
 Der Verlauf zeigt Schlafscore und Befinden als Kurven; die Eintragsliste liegt darunter
 in einem aufklappbaren Bereich.
+
+Sport, Tageslicht, sozialer Kontakt und Sex gehen **nicht** in die Scores ein. Sie sind
+Einflussgrößen, keine Bestandteile von Schlafqualität oder Befinden — stünden sie in der
+Formel, fände die spätere Auswertung nur noch die eigene Gewichtung wieder.
 
 **Routinen** sind bewusst nur Verhaltensweisen, die nachgehalten werden — keine
 Haushaltsaufgaben mit Terminen. Die Google-Kalender-Anbindung gab es bis August 2026

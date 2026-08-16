@@ -44,11 +44,32 @@ function toast(msg) {
 function scheduleSave() {
   clearTimeout(saveTimer);
   setStatus('…');
+  refreshModeBadges();
   saveTimer = setTimeout(() => {
     store.saveDay(currentDay);
     setStatus('Gespeichert');
     updateBackupHint();
   }, 400);
+}
+
+/**
+ * Zählt den Fortschritt an beiden Reitern nach. Nur die beiden Knöpfe werden neu
+ * geschrieben, nicht die Maske — ein vollständiges Neu-Rendern würde am Handy
+ * mitten im Tippen den Fokus aus dem Notizfeld reißen.
+ */
+function refreshModeBadges() {
+  if (!currentDay) return;
+  for (const btn of document.querySelectorAll('.mode-btn')) {
+    const mode = btn.dataset.mode;
+    const { done, total } = store.completeness(currentDay, mode);
+    const old = btn.querySelector('.mode-badge');
+    if (done === 0) { old?.remove(); continue; }
+    const badge = old || btn.appendChild(h('<span class="mode-badge" aria-hidden="true"></span>'));
+    badge.classList.toggle('done', done === total);
+    badge.textContent = done === total ? '✓' : `${done}/${total}`;
+    const label = mode === 'sleep' ? 'Schlaf' : 'Tag';
+    btn.setAttribute('aria-label', `${label}, ${done === total ? 'vollständig' : `${done} von ${total} ausgefüllt`}`);
+  }
 }
 
 function setStatus(text) {
@@ -59,17 +80,27 @@ function setStatus(text) {
 /* ---------- Bausteine ---------- */
 
 /**
- * Skala 1–5 zum Antippen. Erneutes Antippen des gewählten Werts löscht ihn wieder —
- * "keine Angabe" muss erreichbar bleiben, sonst rät man irgendetwas hin.
+ * Bewertungsskala zum Antippen. Erneutes Antippen des gewählten Werts löscht ihn
+ * wieder — "keine Angabe" muss erreichbar bleiben, sonst rät man irgendetwas hin.
+ *
+ * Die Stufenzahl kommt aus dem Eintrag (`scaleMax`), nicht aus einer festen Zahl:
+ * Tage von vor der Umstellung zeigen weiter fünf Felder, neue sechs.
+ *
+ * `invert` für Skalen, bei denen niedrig das Gute ist (Stress) — sonst leuchtet
+ * ein hoher Stresswert grün und die Farbe sagt das Gegenteil der Zahl.
  */
-function scale(field, path, label, hint, low, high, value) {
-  const buttons = [1, 2, 3, 4, 5]
-    .map(
-      (n) => `<button type="button" class="scale-btn${value === n ? ' on' : ''}"
+function scale(path, label, hint, low, high, value, max, { invert = false } = {}) {
+  const mid = max / 2;
+  const buttons = Array.from({ length: max }, (_, i) => i + 1)
+    .map((n) => {
+      const good = invert ? n <= mid : n > mid;
+      // Luft zwischen der letzten negativen und der ersten positiven Stufe.
+      const brk = n === Math.floor(mid) ? ' mid-break' : '';
+      return `<button type="button" class="scale-btn ${good ? 'pos' : 'neg'}${brk}${value === n ? ' on' : ''}"
         data-scale="${path}" data-value="${n}"
-        aria-label="${esc(label)}: ${n} von 5"
-        aria-pressed="${value === n}">${n}</button>`
-    )
+        aria-label="${esc(label)}: ${n} von ${max}"
+        aria-pressed="${value === n}">${n}</button>`;
+    })
     .join('');
   return `
     <div class="field" data-field="${path}">
@@ -77,19 +108,42 @@ function scale(field, path, label, hint, low, high, value) {
         <label>${esc(label)}</label>
         ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
       </div>
-      <div class="scale">${buttons}</div>
+      <div class="scale" style="--steps:${max}">${buttons}</div>
       <div class="scale-ends"><span>${esc(low)}</span><span>${esc(high)}</span></div>
     </div>`;
 }
 
+/**
+ * Zeitfeld mit Vorschlägen. Das native Drehrad bleibt darunter erhalten, ist aber
+ * am Handy der langsamste Teil der ganzen Erfassung — vier Chips mit den eigenen
+ * häufigsten Zeiten und zwei Viertelstunden-Schritte treffen den Normalfall mit
+ * einem Tap.
+ */
 function timeField(path, label, value, hint = '', step = null) {
+  const key = path.split('.').pop();
+  // Solange wenig erfasst ist, gibt es weniger als vier eigene Zeiten. Dann sollen
+  // die vorhandenen Chips die Breite füllen statt in einem halbleeren Raster zu stehen.
+  const times = store.suggestedTimes(key);
+  const chips = times
+    .map(
+      (t) => `<button type="button" class="time-chip${value === t ? ' on' : ''}"
+        data-time="${path}" data-time-value="${t}" aria-pressed="${value === t}">${t}</button>`
+    )
+    .join('');
   return `
-    <div class="field">
+    <div class="field" data-field="${path}">
       <div class="field-head">
         <label for="f-${path}">${esc(label)}</label>
         ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
       </div>
-      <input type="time" id="f-${path}" data-input="${path}" value="${esc(value || '')}"${step ? ` step="${step}"` : ''}>
+      <div class="time-chips" style="--n:${times.length || 1}">${chips}</div>
+      <div class="time-row">
+        <button type="button" class="time-step" data-step="${path}" data-by="-15"
+          aria-label="${esc(label)} 15 Minuten früher">−15</button>
+        <input type="time" id="f-${path}" data-input="${path}" value="${esc(value || '')}"${step ? ` step="${step}"` : ''}>
+        <button type="button" class="time-step" data-step="${path}" data-by="15"
+          aria-label="${esc(label)} 15 Minuten später">+15</button>
+      </div>
     </div>`;
 }
 
@@ -123,10 +177,38 @@ const SPORT_OPTIONS = [
   ['intense', 'Intensiv'],
 ];
 
+/** Kurzform für die Verlaufszeile, wo wenig Platz ist. */
+const SPORT_LABELS = { light: 'Leichter Sport', hard: 'Sport (anstrengend)', intense: 'Sport (intensiv)' };
+
 const AWAKENINGS_OPTIONS = [
   ['none', 'Durchgeschlafen'],
   ['once', '1x wach'],
   ['multiple', 'Mehrfach wach'],
+];
+
+/** Zeit im Freien — neben Sport der stärkste Taktgeber für den Schlafrhythmus. */
+const OUTDOOR_OPTIONS = [
+  ['none', 'Kaum'],
+  ['some', 'Etwas'],
+  ['much', 'Viel'],
+];
+
+/**
+ * Nicht "Freunde ja/nein", sondern wie viel Kontakt: Ein Tag mit vier Terminen und
+ * niemandem danach ist etwas anderes als ein Tag allein — und beides ist nicht
+ * dasselbe wie ein Abend mit Freunden.
+ */
+const SOCIAL_OPTIONS = [
+  ['none', 'Kaum jemanden'],
+  ['some', 'Etwas'],
+  ['much', 'Viel'],
+];
+
+/** Kurz gehalten, damit es auf drei Schaltflächen passt und niemand mitliest. */
+const SEX_OPTIONS = [
+  ['none', 'Nein'],
+  ['solo', 'Solo'],
+  ['partner', 'Zu zweit'],
 ];
 
 /** Tap-Auswahl aus wenigen Optionen, z. B. Ja/Nein oder Tageszeiten. Erneutes Antippen löscht die Wahl. */
@@ -174,10 +256,8 @@ export function renderToday(date = currentDate) {
     ${isFuture ? '<p class="notice">Dieser Tag liegt in der Zukunft.</p>' : ''}
 
     <div class="mode-switch" role="tablist">
-      <button type="button" class="mode-btn${currentMode === 'sleep' ? ' on' : ''}"
-        data-mode="sleep" role="tab" aria-selected="${currentMode === 'sleep'}">Schlaf</button>
-      <button type="button" class="mode-btn${currentMode === 'day' ? ' on' : ''}"
-        data-mode="day" role="tab" aria-selected="${currentMode === 'day'}">Tag</button>
+      ${modeButton('sleep', 'Schlaf', d)}
+      ${modeButton('day', 'Tag', d)}
     </div>
 
     ${currentMode === 'sleep' ? sleepSection(d, nightFrom, nightTo) : daySection(d, routineList)}
@@ -189,31 +269,57 @@ export function renderToday(date = currentDate) {
   updateBackupHint();
 }
 
+/**
+ * Umschalter mit Fortschritt. Der Punkt zeigt, dass in der anderen Maske noch
+ * etwas offen ist — sonst blättert man abends beide durch, nur um zu sehen, ob
+ * man morgens fertig geworden ist. Voll ausgefüllt: Haken statt Zähler.
+ */
+function modeButton(mode, label, d) {
+  const { done, total } = store.completeness(d, mode);
+  const on = currentMode === mode;
+  const badge = done === total
+    ? '<span class="mode-badge done" aria-hidden="true">✓</span>'
+    : done > 0
+      ? `<span class="mode-badge" aria-hidden="true">${done}/${total}</span>`
+      : '';
+  const state = done === total ? 'vollständig' : `${done} von ${total} ausgefüllt`;
+  return `<button type="button" class="mode-btn${on ? ' on' : ''}"
+    data-mode="${mode}" role="tab" aria-selected="${on}"
+    aria-label="${esc(label)}, ${state}">${esc(label)}${badge}</button>`;
+}
+
 function sleepSection(d, nightFrom, nightTo) {
+  const max = d.scaleMax || store.SCALE_MAX;
   return `
     <section class="card">
       <h2>Letzte Nacht <span class="card-sub">${esc(nightFrom)} → ${esc(nightTo)}</span></h2>
-      <div class="grid-2">
-        ${timeField('sleep.bedtime', 'Ins Bett', d.sleep.bedtime, '', 900)}
-        ${timeField('sleep.wakeAt', 'Aufgewacht', d.sleep.wakeAt)}
-      </div>
+      ${timeField('sleep.bedtime', 'Ins Bett', d.sleep.bedtime, '', 900)}
+      ${timeField('sleep.wakeAt', 'Aufgewacht', d.sleep.wakeAt)}
       ${tapGroup('sleep.onset', 'Einschlafen', ONSET_OPTIONS, d.sleep.onset, 'wie schnell?')}
       ${tapGroup('sleep.wakeUp', 'Aufstehen', WAKEUP_OPTIONS, d.sleep.wakeUp)}
       ${tapGroup('sleep.awakenings', 'Nachts wach', AWAKENINGS_OPTIONS, d.sleep.awakenings)}
       <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
-      ${scale('sleep', 'sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested)}
-      ${tapGroup('sleep.sport', 'Sport', SPORT_OPTIONS, d.sleep.sport, `Vortag · ${nightFrom}`)}
+      ${scale('sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested, max)}
+      ${tapGroup('sleep.sex', 'Sex', SEX_OPTIONS, d.sleep.sex, 'gestern Abend / nachts')}
     </section>`;
 }
 
 function daySection(d, routineList) {
+  const max = d.scaleMax || store.SCALE_MAX;
   return `
     <section class="card">
       <h2>Wie ging es dir heute?</h2>
-      ${scale('mood', 'mood.mood', 'Stimmung', '', 'mies', 'super', d.mood.mood)}
-      ${scale('mood', 'mood.energy', 'Energie', '', 'leer', 'voll da', d.mood.energy)}
-      ${scale('mood', 'mood.stress', 'Stress', 'hoch = viel Stress', 'entspannt', 'überdreht', d.mood.stress)}
-      ${scale('mood', 'mood.focus', 'Konzentration', '', 'zerstreut', 'klar', d.mood.focus)}
+      ${scale('mood.mood', 'Stimmung', '', 'mies', 'super', d.mood.mood, max)}
+      ${scale('mood.energy', 'Energie', '', 'leer', 'voll da', d.mood.energy, max)}
+      ${scale('mood.stress', 'Stress', 'hoch = viel Stress', 'entspannt', 'überdreht', d.mood.stress, max, { invert: true })}
+      ${scale('mood.focus', 'Konzentration', '', 'zerstreut', 'klar', d.mood.focus, max)}
+    </section>
+
+    <section class="card">
+      <h2>Aktivität</h2>
+      ${tapGroup('sport', 'Sport', SPORT_OPTIONS, d.sport)}
+      ${tapGroup('outdoor', 'Draußen', OUTDOOR_OPTIONS, d.outdoor, 'Zeit im Tageslicht')}
+      ${tapGroup('social', 'Kontakt', SOCIAL_OPTIONS, d.social, 'Zeit mit Menschen')}
     </section>
 
     <section class="card">
@@ -361,7 +467,7 @@ export function renderHistory() {
           <span>${esc(label)}</span>
           ${trendBadge(values, false)}
         </div>
-        ${lineChart(values, { min: 1, max: 5, color, label: `${label}: Verlauf` })}
+        ${lineChart(values, { min: 1, max: store.SCALE_MAX, color, label: `${label}: Verlauf` })}
       </div>`;
   }).join('');
 
@@ -379,7 +485,8 @@ export function renderHistory() {
     <section class="card">
       <h2>Einzelwerte</h2>
       <div class="spark-grid">${sparks}</div>
-      <p class="chart-hint">Skala 1–5. Bei Stress ist niedrig das Gute.</p>
+      <p class="chart-hint">Skala 1–${store.SCALE_MAX}, keine neutrale Mitte:
+        1–3 negativ, 4–6 positiv. Bei Stress ist niedrig das Gute.</p>
     </section>
 
     <details class="history-details">
@@ -391,10 +498,13 @@ export function renderHistory() {
 function historyRow(day) {
   const dur = store.sleepMinutes(day.sleep);
   const done = Object.values(day.routines).filter(Boolean).length;
+  const max = day.scaleMax || store.SCALE_MAX;
   const bits = [];
   if (dur != null) bits.push(`${store.formatDuration(dur)} Schlaf`);
-  if (day.sleep.rested) bits.push(`Erholt ${day.sleep.rested}/5`);
-  if (day.mood.mood) bits.push(`Stimmung ${day.mood.mood}/5`);
+  if (day.sleep.rested) bits.push(`Erholt ${day.sleep.rested}/${max}`);
+  if (day.mood.mood) bits.push(`Stimmung ${day.mood.mood}/${max}`);
+  // Sonst steht bei Tagen, die nur eine Sportangabe haben, ein blankes "—".
+  if (day.sport && day.sport !== 'none') bits.push(SPORT_LABELS[day.sport] || 'Sport');
   if (done) bits.push(`${done} ${done === 1 ? 'Routine' : 'Routinen'}`);
 
   return `
@@ -506,9 +616,39 @@ function routineForm(r, isNew) {
 
 /* ---------- Ansicht: Mehr ---------- */
 
+/**
+ * Zwischenstände im Browserspeicher. Ersetzt keine Sicherung — wer den Speicher
+ * löscht, löscht sie mit. Hilft gegen den anderen Fall: versehentlich zerschossene
+ * Daten, wo bisher nur ein Import von Hand blieb.
+ */
+function snapshotCard() {
+  const snaps = store.snapshots();
+  if (!snaps.length) return '';
+  const rows = snaps
+    .map(
+      (s) => `
+      <li>
+        <span>${esc(store.formatDate(s.takenAt.slice(0, 10), { day: '2-digit', month: 'short' }))}
+          · ${s.days} ${s.days === 1 ? 'Tag' : 'Tage'}</span>
+        <button type="button" class="btn small" data-restore="${s.slot}">Einspielen</button>
+      </li>`
+    )
+    .join('');
+  return `
+    <section class="card">
+      <h2>Zwischenstände</h2>
+      <p class="lead">Die App legt hier alle paar Tage automatisch einen Abzug ab, drei Stände
+        rollierend. Beim Einspielen bleiben neuere Einträge erhalten.</p>
+      <ul class="snapshot-list">${rows}</ul>
+      <p class="hint-block">Das ist <strong>keine</strong> Sicherung: Diese Abzüge liegen im
+        selben Browserspeicher wie die Einträge und verschwinden mit ihm.</p>
+    </section>`;
+}
+
 export function renderMore() {
   const n = store.dayCount();
   const since = store.daysSinceBackup();
+  const auto = store.autoBackupDays();
   const backupText =
     since == null ? 'Noch nie gesichert' : since === 0 ? 'Heute gesichert' : `Vor ${since} Tagen gesichert`;
 
@@ -520,8 +660,8 @@ export function renderMore() {
     <section class="card">
       <h2>Daten sichern</h2>
       <p class="lead">Die Einträge liegen nur in diesem Browser. Wird der Browserspeicher
-        geleert oder das Gerät gewechselt, sind sie weg. Lade die Sicherung in dein
-        <strong>privates</strong> OneDrive — nicht in das des Arbeitgebers.</p>
+        geleert oder das Gerät gewechselt, sind sie weg. Lege die Sicherung in dein
+        <strong>privates</strong> Konto — nicht in das des Arbeitgebers.</p>
       <p class="status-line">${esc(backupText)} · ${n} ${n === 1 ? 'Tag' : 'Tage'} erfasst</p>
       <div class="btn-row">
         <button type="button" class="btn primary" id="export">Sicherung herunterladen</button>
@@ -532,6 +672,29 @@ export function renderMore() {
         aus der Datei ersetzen sie. Ein Backup kann also nichts überschreiben, was du
         seither erfasst hast.</p>
     </section>
+
+    <section class="card">
+      <h2>Automatisch sichern</h2>
+      <p class="lead">${
+        auto
+          ? `Alle ${auto} Tage legt die App beim nächsten Antippen von selbst eine Datei
+             im Ordner <strong>Download</strong> ab. Eine Uhrzeit lässt sich dafür nicht
+             festlegen — ein Browser darf nur schreiben, während du die App bedienst.`
+          : 'Ausgeschaltet. Du sicherst dann nur von Hand.'
+      }</p>
+      <button type="button" class="btn${auto ? '' : ' primary'}" id="auto-backup-toggle">
+        ${auto ? 'Automatik ausschalten' : 'Alle 3 Tage sichern'}</button>
+      ${
+        auto
+          ? `<p class="hint-block">Beim zweiten Mal fragt Chrome einmalig, ob die Seite mehrere
+             Dateien herunterladen darf — einmal zulassen, danach passiert es still. Der
+             Ordner <em>Download</em> wird auf Android von anderen Apps mitgelesen: Wenn dir
+             das zu offen ist, schalte das hier ab und richte stattdessen den Drive-Abgleich ein.</p>`
+          : ''
+      }
+    </section>
+
+    ${snapshotCard()}
 
     <section class="card">
       <h2>Auf dem Handy behalten</h2>
@@ -610,13 +773,57 @@ function setPath(path, value) {
   obj[parts[0]] = value;
 }
 
-/** Rundet "HH:MM" auf das nächste 15-Minuten-Raster, Mitternacht inklusive. */
-function roundToQuarterHour(hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const total = (((h * 60 + Math.round(m / 15) * 15) % 1440) + 1440) % 1440;
+/** Verschiebt eine Uhrzeit um Minuten, über Mitternacht hinweg. */
+function shiftTime(hhmm, by) {
+  const [hr, mn] = String(hhmm || '').split(':').map(Number);
+  if (Number.isNaN(hr) || Number.isNaN(mn)) return null;
+  const total = (((hr * 60 + mn + by) % 1440) + 1440) % 1440;
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
+
+/** Schreibt eine Uhrzeit ins Modell und hält Eingabefeld und Chips im Gleichstand. */
+function applyTime(path, value) {
+  setPath(path, value);
+  const field = document.querySelector(`[data-field="${path}"]`);
+  if (field) {
+    const input = field.querySelector('input[type="time"]');
+    if (input) input.value = value || '';
+    field.querySelectorAll('[data-time]').forEach((c) => {
+      const on = c.dataset.timeValue === value;
+      c.classList.toggle('on', on);
+      c.setAttribute('aria-pressed', String(on));
+    });
+  }
+  refreshDuration();
+  scheduleSave();
+}
+
+/** Baut die Sicherungsdatei und stößt den Download an. */
+function downloadBackup() {
+  const blob = new Blob([store.exportJSON()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `routinen-tagebuch_${store.isoDate()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/**
+ * Legt die fällige Sicherung ab — ausgelöst vom Fingertipp, nicht von einer Uhr.
+ *
+ * Ein Browser darf eine Datei nur aus einer laufenden Nutzergeste heraus schreiben;
+ * eine echte Zeitsteuerung gibt es im Web nicht. Da jede Benutzung mit einem Tap
+ * beginnt, passiert es faktisch beim ersten Öffnen nach Ablauf der Frist.
+ */
+function maybeAutoBackup() {
+  if (!store.autoBackupDue()) return;
+  downloadBackup();
+  store.markBackup();
+  updateBackupHint();
+  toast('Sicherung im Ordner „Download" abgelegt');
+}
+
+document.addEventListener('click', maybeAutoBackup, true);
 
 function refreshDuration() {
   const el = document.querySelector('[data-duration]');
@@ -663,8 +870,28 @@ function updateBackupHint() {
 }
 
 app.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-mode], [data-open], [data-edit], [data-deactivate], [data-goto], .wd');
+  const t = e.target.closest('[data-scale], [data-tap], [data-nav], [data-mode], [data-open], [data-edit], [data-deactivate], [data-goto], [data-time], [data-step], .wd');
   if (!t) return;
+
+  if (t.dataset.time) {
+    const path = t.dataset.time;
+    const value = t.dataset.timeValue;
+    const parts = path.split('.');
+    const current = parts.reduce((o, k) => o?.[k], currentDay);
+    // Erneutes Antippen löscht — wie bei allen anderen Tap-Feldern auch.
+    applyTime(path, current === value ? '' : value);
+    return;
+  }
+
+  if (t.dataset.step) {
+    const path = t.dataset.step;
+    const parts = path.split('.');
+    const current = parts.reduce((o, k) => o?.[k], currentDay);
+    // Ohne Ausgangswert gibt es nichts zu verschieben — dann zuerst eine Zeit wählen.
+    const next = shiftTime(current, Number(t.dataset.by));
+    if (next) applyTime(path, next);
+    return;
+  }
 
   if (t.dataset.tap) {
     const path = t.dataset.tap;
@@ -787,14 +1014,12 @@ app.addEventListener('change', (e) => {
   // Erst beim Verlassen des Feldes runden (nicht bei jedem Tastendruck) - sonst
   // reißt es dem Nutzer mitten in der Eingabe die Uhrzeit unter der Hand weg.
   if (e.target.dataset.input === 'sleep.bedtime' && e.target.value) {
-    const rounded = roundToQuarterHour(e.target.value);
-    if (rounded !== e.target.value) {
-      e.target.value = rounded;
-      setPath('sleep.bedtime', rounded);
-      refreshDuration();
-      scheduleSave();
-    }
+    applyTime('sleep.bedtime', store.roundToQuarterHour(e.target.value));
+    return;
   }
+
+  // Von Hand eingetippte Zeit: Chips nachziehen, damit die Auswahl stimmt.
+  if (e.target.dataset.input === 'sleep.wakeAt') applyTime('sleep.wakeAt', e.target.value);
 });
 
 app.addEventListener('click', (e) => {
@@ -837,16 +1062,29 @@ app.addEventListener('click', (e) => {
   }
 
   if (id === 'export') {
-    const stamp = store.isoDate();
-    const blob = new Blob([store.exportJSON()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `routinen-tagebuch_${stamp}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    downloadBackup();
     store.markBackup();
     renderMore();
     toast('Sicherung erstellt');
+  }
+
+  if (id === 'auto-backup-toggle') {
+    const off = store.autoBackupDays() > 0;
+    store.setAutoBackupDays(off ? 0 : 3);
+    renderMore();
+    toast(off ? 'Automatische Sicherung aus' : 'Automatische Sicherung alle 3 Tage');
+  }
+
+  if (e.target.dataset.restore) {
+    const slot = Number(e.target.dataset.restore);
+    if (!confirm('Diesen Zwischenstand einspielen? Neuere Einträge bleiben erhalten.')) return;
+    try {
+      const r = store.restoreSnapshot(slot);
+      renderMore();
+      toast(`${r.added} neu, ${r.updated} aktualisiert, ${r.skipped} unverändert`);
+    } catch (err) {
+      alert(`Zwischenstand nicht lesbar:\n${err.message}`);
+    }
   }
 
   if (id === 'import-btn') document.getElementById('import-file').click();
@@ -918,6 +1156,39 @@ function handleImport(input) {
   };
   reader.readAsText(file);
 }
+
+/* ---------- Wischen zwischen Tagen ---------- */
+
+/**
+ * Quer wischen wechselt den Tag. Die Pfeile oben bleiben — die Geste ist eine
+ * Abkürzung, kein Ersatz.
+ *
+ * Die Schwellen sind bewusst streng: erst ab 60 px waagerecht und nur, wenn die
+ * Bewegung deutlich flacher als steil war. Sonst springt beim Scrollen durch eine
+ * lange Maske versehentlich der Tag um, und man schreibt in den falschen Eintrag.
+ */
+let touchStart = null;
+
+app.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return;
+  touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+
+app.addEventListener('touchend', (e) => {
+  if (!touchStart || !document.querySelector('.day-nav')) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStart.x;
+  const dy = t.clientY - touchStart.y;
+  touchStart = null;
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
+
+  // Nach links wischen heißt vorwärts — wie beim Blättern.
+  const next = store.addDays(currentDate, dx < 0 ? 1 : -1);
+  if (next > store.isoDate()) return;
+  clearTimeout(saveTimer);
+  store.saveDay(currentDay);
+  renderToday(next);
+}, { passive: true });
 
 /** Vor dem Verlassen der Seite den ausstehenden Speichervorgang erzwingen. */
 export function flush() {
