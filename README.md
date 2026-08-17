@@ -91,8 +91,9 @@ Beim Abendeintrag ist beides frisch im Kopf. Für die spätere Auswertung heißt
 Routinen und Sport von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht.
 
 Die Faustregel für neue Felder: Was **tagsüber** passiert (Sport, Tageslicht, sozialer
-Kontakt), steht im Tag. Was zur **Nacht** gehört, steht im Schlaf desselben Eintrags —
-auch Sex, denn es liegt zeitlich vor genau dieser Nacht und nicht vor der nächsten.
+Kontakt, Sex), steht im Tag. Nur was sich auf die zurückliegende Nacht bezieht, steht im
+Schlaf. Entscheidend ist, ob man die Frage morgens schon beantworten kann — bei allem,
+was den ganzen Tag umfasst, geht das nicht.
 
 Bis August 2026 lag das Sport-Feld in der Schlaf-Maske und meinte trotzdem den Vortag.
 Diese Sonderregel ist weg; die Migration auf Schema 2 hat die Werte in den Tag verschoben,

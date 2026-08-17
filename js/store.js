@@ -13,7 +13,7 @@
  */
 
 const KEY = 'routinen-tagebuch';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * Stufen der Bewertungsskala. Sechs statt fünf, weil eine gerade Anzahl keine
@@ -103,9 +103,30 @@ function migrate(d) {
     }
   }
   if (!(d.schemaVersion >= 2)) migrateToV2(d);
+  if (!(d.schemaVersion >= 4)) migrateToV4(d);
   migrateScaleTo6(d);
   d.schemaVersion = SCHEMA_VERSION;
   return d;
+}
+
+/**
+ * Schema 4: Sex aus der Schlaf- in die Tages-Maske.
+ *
+ * Als `sleep.sex` meinte das Feld "gestern Abend / nachts", also die Nacht vor
+ * dem Eintrag. Gefragt ist aber der ganze Tag - und den kann man morgens nicht
+ * beurteilen. Jetzt steht es wie Sport im Tag, an dem es passiert ist, und die
+ * alten Werte wandern entsprechend einen Tag zurück.
+ */
+function migrateToV4(d) {
+  for (const [date, day] of Object.entries(d.days)) {
+    const sex = day.sleep?.sex;
+    if (sex) {
+      const prev = addDays(date, -1);
+      if (!d.days[prev]) d.days[prev] = { ...emptyDay(prev), updatedAt: day.updatedAt || null };
+      d.days[prev].sex = sex;
+    }
+    if (day.sleep) delete day.sleep.sex;
+  }
 }
 
 /**
@@ -205,13 +226,13 @@ function emptyDay(date) {
     date,
     // Mit wie vielen Stufen wurde dieser Tag bewertet? Alte Einträge stehen auf 5.
     scaleMax: SCALE_MAX,
-    // sex gehört zur Nacht X-1 -> X, also in denselben Block wie der übrige Schlaf.
-    sleep: { bedtime: '', onset: null, wakeAt: '', wakeUp: null, awakenings: null, rested: null, sex: null },
+    sleep: { bedtime: '', onset: null, wakeAt: '', wakeUp: null, awakenings: null, rested: null },
     mood: { mood: null, energy: null, stress: null, focus: null },
     // Tagsüber passiert: gehört zu Tag X und wirkt auf die Nacht X -> X+1.
     sport: null,
     outdoor: null,
     social: null,
+    sex: null,
     routines: {},
     intake: { alcohol: null, lastCoffee: null, lastMeal: null },
     note: '',
@@ -261,9 +282,9 @@ function allDays() {
 function isFilled(day) {
   const s = day.sleep, m = day.mood, i = day.intake;
   return Boolean(
-    s.rested || s.bedtime || s.wakeAt || s.onset || s.wakeUp || s.awakenings || s.sex ||
+    s.rested || s.bedtime || s.wakeAt || s.onset || s.wakeUp || s.awakenings ||
     m.mood || m.energy || m.stress || m.focus ||
-    day.sport || day.outdoor || day.social ||
+    day.sport || day.outdoor || day.social || day.sex ||
     i.alcohol || i.lastCoffee || i.lastMeal ||
     day.note.trim() ||
     Object.values(day.routines).some(Boolean)
@@ -280,8 +301,8 @@ export function completeness(day, mode) {
   const s = day.sleep, m = day.mood, i = day.intake;
   const fields =
     mode === 'sleep'
-      ? [s.bedtime, s.wakeAt, s.onset, s.wakeUp, s.awakenings, s.rested, s.sex]
-      : [m.mood, m.energy, m.stress, m.focus, day.sport, day.outdoor, day.social,
+      ? [s.bedtime, s.wakeAt, s.onset, s.wakeUp, s.awakenings, s.rested]
+      : [m.mood, m.energy, m.stress, m.focus, day.sport, day.outdoor, day.social, day.sex,
          i.alcohol, i.lastCoffee, i.lastMeal];
   const done = fields.filter((v) => v !== null && v !== undefined && v !== '').length;
   return { done, total: fields.length };

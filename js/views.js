@@ -204,7 +204,11 @@ const SOCIAL_OPTIONS = [
   ['much', 'Viel'],
 ];
 
-/** Kurz gehalten, damit es auf drei Schaltflächen passt und niemand mitliest. */
+/**
+ * Bezieht sich auf den ganzen Tag, nicht auf die Nacht davor — deshalb steht das
+ * Feld in der Tages-Maske. Kurz beschriftet, damit es auf drei Schaltflächen passt
+ * und beim Ausfüllen niemand mitliest.
+ */
 const SEX_OPTIONS = [
   ['none', 'Nein'],
   ['solo', 'Solo'],
@@ -300,7 +304,6 @@ function sleepSection(d, nightFrom, nightTo) {
       ${tapGroup('sleep.awakenings', 'Nachts wach', AWAKENINGS_OPTIONS, d.sleep.awakenings)}
       <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
       ${scale('sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested, max)}
-      ${tapGroup('sleep.sex', 'Sex', SEX_OPTIONS, d.sleep.sex, 'gestern Abend / nachts')}
     </section>`;
 }
 
@@ -320,6 +323,7 @@ function daySection(d, routineList) {
       ${tapGroup('sport', 'Sport', SPORT_OPTIONS, d.sport)}
       ${tapGroup('outdoor', 'Draußen', OUTDOOR_OPTIONS, d.outdoor, 'Zeit im Tageslicht')}
       ${tapGroup('social', 'Kontakt', SOCIAL_OPTIONS, d.social, 'Zeit mit Menschen')}
+      ${tapGroup('sex', 'Sex', SEX_OPTIONS, d.sex, 'heute')}
     </section>
 
     <section class="card">
