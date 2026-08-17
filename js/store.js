@@ -2,14 +2,20 @@
  * Datenhaltung. Alles liegt in localStorage unter EINEM Schlüssel.
  *
  * Tages-Konvention (wichtig für die spätere Auswertung):
- * Ein Eintrag für Datum X enthält
- *   - den Schlaf der Nacht von X-1 auf X ("letzte Nacht"),
- *   - Befinden, Aktivität und Routinen des Tages X.
- * Beim Abendeintrag ist beides gerade frisch im Kopf. Für die Auswertung heißt das:
- * Routinen und Sport von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht.
+ * Ein Eintrag für Datum X enthält den Schlaf der Nacht von X-1 auf X ("letzte
+ * Nacht") sowie Befinden, Aktivität, Routinen und Konsum des Tages X. Für die
+ * Auswertung heißt das: Routinen, Sport und Konsum von Tag X-1 wirken auf den
+ * Schlaf, der im Eintrag von Tag X steht.
  *
- * Alles, was tagsüber passiert (Sport, Tageslicht, sozialer Kontakt), steht im Tag.
- * Alles, was zur Nacht gehört (auch Sex), steht im Schlaf desselben Eintrags.
+ * Wo etwas GESPEICHERT wird, ist unabhängig davon, wann man es AUSFÜLLT: Ein
+ * Wert gehört immer in den Eintrag des Tages, auf den er sich inhaltlich
+ * bezieht - unabhängig davon, in welcher Maske oder an welchem Morgen er
+ * eingetragen wird. Routinen und Konsum von Tag X-1 werden erst am Morgen von
+ * Tag X abgefragt (als Rückblick, im Schlaf-Block), landen aber trotzdem im
+ * Eintrag von Tag X-1: Am nächsten Morgen ist "hast du gestern gelesen?"
+ * eindeutig zu beantworten, am Abend selbst nicht ("Kein Handy mehr ab 22 Uhr"
+ * lässt sich um 21 Uhr noch nicht bewerten) - und wer abends erfasst, holt sich
+ * mit der App genau das Handy zurück, das eine der Routinen vermeiden soll.
  */
 
 const KEY = 'routinen-tagebuch';
@@ -294,16 +300,20 @@ function isFilled(day) {
 /**
  * Wie viele Felder einer Maske sind ausgefüllt? Für den Fortschrittspunkt am
  * Umschalter - man soll sehen, ob noch etwas offen ist, ohne beide Masken
- * durchzublättern. Notiz und Schlagworte zählen bewusst nicht mit: sie sind
- * freiwillig, und ein Tag ohne Notiz ist kein unvollständiger Tag.
+ * durchzublättern. Notiz, Schlagworte und Routinen zählen bewusst nicht mit:
+ * Notiz/Schlagworte sind freiwillig, und bei Routinen ist "nicht gemacht" eine
+ * genauso gültige, endgültige Antwort wie "gemacht" - es gibt dort kein "blank".
+ *
+ * `extra` nimmt Werte entgegen, die zur Maske gehören, aber auf einem anderen
+ * Tag liegen - Konsum wird im Schlaf-Block als Rückblick auf gestern gefragt,
+ * lebt aber im Eintrag von gestern, nicht in `day`.
  */
-export function completeness(day, mode) {
-  const s = day.sleep, m = day.mood, i = day.intake;
+export function completeness(day, mode, extra = []) {
+  const s = day.sleep, m = day.mood;
   const fields =
     mode === 'sleep'
-      ? [s.bedtime, s.wakeAt, s.onset, s.wakeUp, s.awakenings, s.rested]
-      : [m.mood, m.energy, m.stress, m.focus, day.sport, day.outdoor, day.social, day.sex,
-         i.alcohol, i.lastCoffee, i.lastMeal];
+      ? [s.bedtime, s.wakeAt, s.onset, s.wakeUp, s.awakenings, s.rested, ...extra]
+      : [m.mood, m.energy, m.stress, m.focus, day.sport, day.outdoor, day.social, day.sex, ...extra];
   const done = fields.filter((v) => v !== null && v !== undefined && v !== '').length;
   return { done, total: fields.length };
 }

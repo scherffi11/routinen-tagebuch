@@ -82,29 +82,41 @@ Apps nicht.
 
 ## Tages-Konvention
 
-Ein Eintrag für Datum X enthält
+Ein Eintrag für Datum X enthält den Schlaf der Nacht **X-1 → X** ("letzte Nacht") sowie
+Befinden, Aktivität, Routinen und Konsum **des Tages X**. Für die spätere Auswertung heißt
+das: Routinen, Sport und Konsum von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X
+steht.
 
-- den Schlaf der Nacht **X-1 → X** ("letzte Nacht") und
-- Befinden, Aktivität und Routinen **des Tages X**.
+Wo ein Wert **gespeichert** wird, ist unabhängig davon, wann er **ausgefüllt** wird. Ein
+Wert gehört immer in den Eintrag des Tages, auf den er sich inhaltlich bezieht — egal, in
+welcher Maske er eingetragen wird.
 
-Beim Abendeintrag ist beides frisch im Kopf. Für die spätere Auswertung heißt das:
-Routinen und Sport von Tag X-1 wirken auf den Schlaf, der im Eintrag von Tag X steht.
+Die Erfassung ist in zwei Masken geteilt:
 
-Die Faustregel für neue Felder: Was **tagsüber** passiert (Sport, Tageslicht, sozialer
-Kontakt, Sex), steht im Tag. Nur was sich auf die zurückliegende Nacht bezieht, steht im
-Schlaf. Entscheidend ist, ob man die Frage morgens schon beantworten kann — bei allem,
-was den ganzen Tag umfasst, geht das nicht.
+- **Schlaf** (morgens) — die Nacht, plus ein Rückblick auf **gestern**: Routinen und
+  Konsum (Alkohol, letzter Kaffee, letzte große Mahlzeit). Diese Felder werden erst am
+  nächsten Morgen abgefragt, weil sie sich erst dann sicher beantworten lassen — "hast du
+  gestern gelesen?" ist am nächsten Morgen eindeutig, um 21 Uhr noch nicht, weil der Abend
+  ja noch läuft. Gespeichert werden sie trotzdem im Eintrag von **gestern**, nicht in dem
+  des angezeigten Tages.
+- **Tag** (abends) — Stimmung, Aktivität (Sport, Tageslicht, Kontakt, Sex) und Notiz. Nur
+  das, was sich wirklich erst am Abend bewerten lässt.
 
-Bis August 2026 lag das Sport-Feld in der Schlaf-Maske und meinte trotzdem den Vortag.
-Diese Sonderregel ist weg; die Migration auf Schema 2 hat die Werte in den Tag verschoben,
-an dem der Sport stattgefunden hat.
+Der Nebeneffekt ist gewollt: Wer abends Routinen wie "Kein Handy mehr ab 22 Uhr" gerade an
+diesem Abend im Tagebuch abhaken müsste, holt sich mit der App genau das Handy zurück, das
+die Routine vermeiden soll. Mit dem Rückblick am nächsten Morgen fällt das weg — die
+Abendmaske bleibt kurz, und die App steht der eigenen Routine nicht im Weg.
 
-Die Erfassung ist in zwei Masken geteilt — **Schlaf** (morgens ausfüllbar, sobald man
-aufgewacht ist) und **Tag** (abends, für Stimmung/Aktivität/Routinen/Konsum/Notiz). Ein
-Umschalter oben in der Erfassung wechselt zwischen beiden; welche zuerst angezeigt wird,
-richtet sich nach der Tageszeit (vor 12 Uhr Schlaf, sonst Tag). Beide Masken schreiben in
-denselben Tageseintrag, es gibt keine getrennte Datenstruktur dafür. Am Umschalter zeigt ein
-kleiner Zähler, wie viel in der jeweiligen Maske noch offen ist.
+Bis August 2026 lag das Sport-Feld in der Schlaf-Maske und meinte trotzdem den Vortag —
+eine Sonderregel, die man beim Ausfüllen mitdenken musste. Diese Art Krücke gibt es nicht
+mehr: Ein Feld liegt heute entweder inhaltlich UND als Eingabe beim selben Tag (Sport,
+Aktivität), oder es wird bewusst am Folgetag abgefragt und dabei explizit auf den Vortag
+geschrieben (Routinen, Konsum) — nie stillschweigend beides vermischt.
+
+Ein Umschalter oben in der Erfassung wechselt zwischen den Masken; welche zuerst angezeigt
+wird, richtet sich nach der Tageszeit (vor 12 Uhr Schlaf, sonst Tag). Ein kleiner Zähler
+am Umschalter zeigt, wie viel in der jeweiligen Maske noch offen ist — für "Schlaf" zählt
+dabei auch der gestrige Konsum mit, für "Tag" nicht mehr (der ist ja nach vorn gewandert).
 
 Quer wischen wechselt den Tag; die Pfeile oben bleiben. Die Schwellen sind streng gesetzt
 (60 px waagerecht, deutlich flacher als steil), damit beim Scrollen durch eine lange Maske

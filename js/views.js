@@ -12,6 +12,16 @@ const app = document.getElementById('app');
 /** Aktuell bearbeiteter Tag in der Erfassung. */
 let currentDate = store.isoDate();
 let currentDay = null;
+/**
+ * Vortag von currentDay, mitgeladen für den "Gestern"-Block im Schlaf-Modus:
+ * Routinen und Konsum werden dort erfragt, gehören aber inhaltlich zum Vortag
+ * und werden auch dort gespeichert - siehe Tages-Konvention in store.js.
+ */
+let previousDay = null;
+/** Nur previousDay sichern, wenn dort wirklich etwas geändert wurde - sonst
+ * würde jedes Speichern von currentDay auch den Vortag unnötig "berühren"
+ * und dessen updatedAt verfälschen, was den Geräte-Abgleich durcheinanderbringt. */
+let previousDayDirty = false;
 let saveTimer = null;
 /** Schlaf-Maske morgens, Tages-Maske abends — je nachdem, wann man reinschaut. */
 let currentMode = new Date().getHours() < 12 ? 'sleep' : 'day';
@@ -47,9 +57,18 @@ function scheduleSave() {
   refreshModeBadges();
   saveTimer = setTimeout(() => {
     store.saveDay(currentDay);
+    if (previousDayDirty) { store.saveDay(previousDay); previousDayDirty = false; }
     setStatus('Gespeichert');
     updateBackupHint();
   }, 400);
+}
+
+/** Speichert beide Tage sofort, falls etwas aussteht - für Navigation und Verlassen. */
+function flushNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (currentDay) store.saveDay(currentDay);
+  if (previousDayDirty) { store.saveDay(previousDay); previousDayDirty = false; }
 }
 
 /**
@@ -61,7 +80,7 @@ function refreshModeBadges() {
   if (!currentDay) return;
   for (const btn of document.querySelectorAll('.mode-btn')) {
     const mode = btn.dataset.mode;
-    const { done, total } = store.completeness(currentDay, mode);
+    const { done, total } = store.completeness(currentDay, mode, yesterdayExtra(mode));
     const old = btn.querySelector('.mode-badge');
     if (done === 0) { old?.remove(); continue; }
     const badge = old || btn.appendChild(h('<span class="mode-badge" aria-hidden="true"></span>'));
@@ -238,13 +257,13 @@ function tapGroup(path, label, options, value, hint = '') {
 export function renderToday(date = currentDate) {
   currentDate = date;
   currentDay = store.getDay(date);
+  previousDay = store.getDay(store.addDays(date, -1));
+  previousDayDirty = false;
   const d = currentDay;
   const nightFrom = store.formatDate(store.addDays(date, -1), { day: 'numeric', month: 'short' });
   const nightTo = store.formatDate(date, { day: 'numeric', month: 'short' });
   const isFuture = date > store.isoDate();
   const atToday = date >= store.isoDate();
-
-  const routineList = store.routinesForDate(date);
 
   app.innerHTML = `
     <header class="day-nav">
@@ -264,7 +283,7 @@ export function renderToday(date = currentDate) {
       ${modeButton('day', 'Tag', d)}
     </div>
 
-    ${currentMode === 'sleep' ? sleepSection(d, nightFrom, nightTo) : daySection(d, routineList)}
+    ${currentMode === 'sleep' ? sleepSection(d, nightFrom, nightTo, previousDay) : daySection(d)}
 
     <p class="save-status">${d.updatedAt ? 'Gespeichert' : 'Wird automatisch gespeichert'}</p>
     <div class="backup-hint" hidden></div>
@@ -273,13 +292,20 @@ export function renderToday(date = currentDate) {
   updateBackupHint();
 }
 
+/** Konsum-Werte des Vortags für die Fortschrittszählung im Schlaf-Modus. */
+function yesterdayExtra(mode) {
+  if (mode !== 'sleep' || !previousDay) return [];
+  const i = previousDay.intake;
+  return [i.alcohol, i.lastCoffee, i.lastMeal];
+}
+
 /**
  * Umschalter mit Fortschritt. Der Punkt zeigt, dass in der anderen Maske noch
  * etwas offen ist — sonst blättert man abends beide durch, nur um zu sehen, ob
  * man morgens fertig geworden ist. Voll ausgefüllt: Haken statt Zähler.
  */
 function modeButton(mode, label, d) {
-  const { done, total } = store.completeness(d, mode);
+  const { done, total } = store.completeness(d, mode, yesterdayExtra(mode));
   const on = currentMode === mode;
   const badge = done === total
     ? '<span class="mode-badge done" aria-hidden="true">✓</span>'
@@ -292,7 +318,7 @@ function modeButton(mode, label, d) {
     aria-label="${esc(label)}, ${state}">${esc(label)}${badge}</button>`;
 }
 
-function sleepSection(d, nightFrom, nightTo) {
+function sleepSection(d, nightFrom, nightTo, prev) {
   const max = d.scaleMax || store.SCALE_MAX;
   return `
     <section class="card">
@@ -304,10 +330,53 @@ function sleepSection(d, nightFrom, nightTo) {
       ${tapGroup('sleep.awakenings', 'Nachts wach', AWAKENINGS_OPTIONS, d.sleep.awakenings)}
       <p class="duration">Schlafdauer (geschätzt): <strong data-duration>${store.formatDuration(store.sleepMinutes(d.sleep))}</strong></p>
       ${scale('sleep.rested', 'Erholt aufgewacht', '', 'wie gerädert', 'topfit', d.sleep.rested, max)}
+    </section>
+
+    ${yesterdaySection(prev, nightFrom)}`;
+}
+
+/**
+ * Rückblick auf gestern: Routinen und Konsum. Bewusst hier im Schlaf-Block statt
+ * abends — beides lässt sich erst rückblickend sicher beantworten ("hast du
+ * gestern gelesen?" ist am nächsten Morgen eindeutig, um 21 Uhr noch nicht), und
+ * wer es abends ausfüllt, holt sich mit der App genau das Handy zurück, das eine
+ * der Routinen gerade vermeiden soll.
+ *
+ * Die Felder gehören zu `prev` (dem Vortag), nicht zu `d` — deshalb data-scope
+ * auf der Karte: Die Event-Handler unten lesen daran ab, welches Tagesobjekt sie
+ * anfassen müssen.
+ */
+function yesterdaySection(prev, nightFrom) {
+  const routineList = store.routinesForDate(prev.date);
+  return `
+    <section class="card" data-scope="prev">
+      <h2>Gestern <span class="card-sub">${esc(nightFrom)}</span></h2>
+      <p class="lead">Am Ende des Tages sicherer zu beantworten als mittendrin.</p>
+      ${
+        routineList.length
+          ? `<ul class="routine-list">${routineList
+              .map(
+                (r) => `
+        <li>
+          <label class="check">
+            <input type="checkbox" data-routine="${esc(r.id)}" ${prev.routines[r.id] ? 'checked' : ''}>
+            <span class="box" aria-hidden="true"></span>
+            <span class="check-label">${esc(r.name)}${
+                  r.time ? `<span class="routine-time">${esc(r.time)}</span>` : ''
+                }</span>
+          </label>
+        </li>`
+              )
+              .join('')}</ul>`
+          : '<p class="empty">Noch keine Routinen angelegt. Unter „Routinen" hinzufügen.</p>'
+      }
+      ${tapGroup('intake.alcohol', 'Alkohol', YESNO_OPTIONS, prev.intake.alcohol)}
+      ${tapGroup('intake.lastCoffee', 'Letzter Kaffee', DAYTIME_OPTIONS, prev.intake.lastCoffee)}
+      ${tapGroup('intake.lastMeal', 'Letzte große Mahlzeit', DAYTIME_OPTIONS, prev.intake.lastMeal)}
     </section>`;
 }
 
-function daySection(d, routineList) {
+function daySection(d) {
   const max = d.scaleMax || store.SCALE_MAX;
   return `
     <section class="card">
@@ -324,35 +393,6 @@ function daySection(d, routineList) {
       ${tapGroup('outdoor', 'Draußen', OUTDOOR_OPTIONS, d.outdoor, 'Zeit im Tageslicht')}
       ${tapGroup('social', 'Kontakt', SOCIAL_OPTIONS, d.social, 'Zeit mit Menschen')}
       ${tapGroup('sex', 'Sex', SEX_OPTIONS, d.sex, 'heute')}
-    </section>
-
-    <section class="card">
-      <h2>Routinen</h2>
-      ${
-        routineList.length
-          ? `<ul class="routine-list">${routineList
-              .map(
-                (r) => `
-        <li>
-          <label class="check">
-            <input type="checkbox" data-routine="${esc(r.id)}" ${d.routines[r.id] ? 'checked' : ''}>
-            <span class="box" aria-hidden="true"></span>
-            <span class="check-label">${esc(r.name)}${
-                  r.time ? `<span class="routine-time">${esc(r.time)}</span>` : ''
-                }</span>
-          </label>
-        </li>`
-              )
-              .join('')}</ul>`
-          : '<p class="empty">Noch keine Routinen angelegt. Unter „Routinen" hinzufügen.</p>'
-      }
-    </section>
-
-    <section class="card">
-      <h2>Konsum</h2>
-      ${tapGroup('intake.alcohol', 'Alkohol', YESNO_OPTIONS, d.intake.alcohol)}
-      ${tapGroup('intake.lastCoffee', 'Letzter Kaffee', DAYTIME_OPTIONS, d.intake.lastCoffee)}
-      ${tapGroup('intake.lastMeal', 'Letzte große Mahlzeit', DAYTIME_OPTIONS, d.intake.lastMeal)}
     </section>
 
     <section class="card">
@@ -769,12 +809,26 @@ function driveCard() {
 
 /* ---------- Ereignisse ---------- */
 
-/** Setzt einen Wert wie "sleep.quality" im aktuellen Tag. */
-function setPath(path, value) {
+/** Setzt einen Wert wie "sleep.quality" im übergebenen Tag. */
+function setPath(day, path, value) {
   const parts = path.split('.');
-  let obj = currentDay;
+  let obj = day;
   while (parts.length > 1) obj = obj[parts.shift()];
   obj[parts[0]] = value;
+}
+
+/**
+ * Welcher Tag ist gemeint - der gerade angezeigte oder gestern? Felder im
+ * "Gestern"-Block (siehe data-scope in yesterdaySection) schreiben in previousDay,
+ * alles andere in currentDay. Setzt bei previousDay gleich das Dirty-Flag, damit
+ * scheduleSave weiß, dass dort wirklich etwas zu sichern ist.
+ */
+function targetDay(el) {
+  if (el.closest('[data-scope="prev"]')) {
+    previousDayDirty = true;
+    return previousDay;
+  }
+  return currentDay;
 }
 
 /** Verschiebt eine Uhrzeit um Minuten, über Mitternacht hinweg. */
@@ -787,7 +841,7 @@ function shiftTime(hhmm, by) {
 
 /** Schreibt eine Uhrzeit ins Modell und hält Eingabefeld und Chips im Gleichstand. */
 function applyTime(path, value) {
-  setPath(path, value);
+  setPath(currentDay, path, value);
   const field = document.querySelector(`[data-field="${path}"]`);
   if (field) {
     const input = field.querySelector('input[type="time"]');
@@ -900,10 +954,11 @@ app.addEventListener('click', (e) => {
   if (t.dataset.tap) {
     const path = t.dataset.tap;
     const value = t.dataset.tapValue;
+    const day = targetDay(t);
     const parts = path.split('.');
-    const current = parts.reduce((o, k) => o?.[k], currentDay);
+    const current = parts.reduce((o, k) => o?.[k], day);
     const next = current === value ? null : value;
-    setPath(path, next);
+    setPath(day, path, next);
     t.closest('.tap-group').querySelectorAll('[data-tap]').forEach((b) => {
       const on = b.dataset.tapValue === next;
       b.classList.toggle('on', on);
@@ -920,7 +975,7 @@ app.addEventListener('click', (e) => {
     const parts = path.split('.');
     const current = parts.reduce((o, k) => o?.[k], currentDay);
     const next = current === value ? null : value;
-    setPath(path, next);
+    setPath(currentDay, path, next);
     // Nur die betroffene Skala anfassen, damit kein Re-Render den Fokus klaut.
     t.closest('.field').querySelectorAll('.scale-btn').forEach((b) => {
       const on = Number(b.dataset.value) === next;
@@ -934,8 +989,7 @@ app.addEventListener('click', (e) => {
   if (t.dataset.nav) {
     const next = store.addDays(currentDate, Number(t.dataset.nav));
     if (next > store.isoDate()) return;
-    clearTimeout(saveTimer);
-    store.saveDay(currentDay);
+    flushNow();
     renderToday(next);
     return;
   }
@@ -943,8 +997,7 @@ app.addEventListener('click', (e) => {
   if (t.dataset.mode) {
     if (t.dataset.mode === currentMode) return;
     // Ausstehende Eingabe sichern, sonst überschreibt der Neu-Render mit altem Stand aus dem Store.
-    clearTimeout(saveTimer);
-    store.saveDay(currentDay);
+    flushNow();
     currentMode = t.dataset.mode;
     renderToday(currentDate);
     return;
@@ -988,10 +1041,12 @@ app.addEventListener('input', (e) => {
   const el = e.target;
 
   if (el.dataset.input) {
+    // Zeit- und Notizfelder gibt es nur bei "heute" (siehe applyTime), nie im
+    // "Gestern"-Block - hier reicht currentDay.
     const path = el.dataset.input;
     let value = el.value;
     if (el.type === 'number') value = value === '' ? null : Number(value);
-    setPath(path, value);
+    setPath(currentDay, path, value);
     if (path.startsWith('sleep.')) refreshDuration();
     scheduleSave();
     return;
@@ -1004,7 +1059,8 @@ app.addEventListener('input', (e) => {
   }
 
   if (el.dataset.routine) {
-    currentDay.routines[el.dataset.routine] = el.checked;
+    const day = targetDay(el);
+    day.routines[el.dataset.routine] = el.checked;
     scheduleSave();
   }
 });
@@ -1189,18 +1245,13 @@ app.addEventListener('touchend', (e) => {
   // Nach links wischen heißt vorwärts — wie beim Blättern.
   const next = store.addDays(currentDate, dx < 0 ? 1 : -1);
   if (next > store.isoDate()) return;
-  clearTimeout(saveTimer);
-  store.saveDay(currentDay);
+  flushNow();
   renderToday(next);
 }, { passive: true });
 
 /** Vor dem Verlassen der Seite den ausstehenden Speichervorgang erzwingen. */
 export function flush() {
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    if (currentDay) store.saveDay(currentDay);
-  }
+  flushNow();
 }
 
 /**
